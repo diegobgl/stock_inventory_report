@@ -1,23 +1,20 @@
 <odoo>
-
-    <!-- Añadir el componente OWL a la vista -->
-    
     <record id="view_stock_inventory_report_tree" model="ir.ui.view">
         <field name="name">stock.inventory.report.tree</field>
         <field name="model">stock.inventory.report</field>
         <field name="arch" type="xml">
-            <div>
-                <div class="o_dashboard_wrapper">
-                    <t t-component="inventory.InventoryDashboard"/>
-                </div>
-                <!-- Aquí va tu vista de lista -->
-                <tree string="Reporte de Inventario a Fecha">
-                    <field name="product_id"/>
-                    <field name="location_id"/>
-                    <field name="quantity"/>
-                    <field name="date"/>
-                </tree>
-            </div>
+            <tree string="Reporte de Inventario a Fecha">
+                <!-- Aquí va la referencia al componente OWL -->
+                <xpath expr="//tree" position="before">
+                    <div class="o_dashboard_wrapper">
+                        <t t-component="inventory.InventoryDashboard"/>
+                    </div>
+                </xpath>
+                <field name="product_id"/>
+                <field name="location_id"/>
+                <field name="quantity"/>
+                <field name="date"/>
+            </tree>
         </field>
     </record>
 </odoo>
