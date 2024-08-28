@@ -6,7 +6,7 @@
     'description': "Módulo para consultar el inventario a una fecha específica, con vista de lista, wizard para seleccionar la fecha y exportación a Excel.",
     'author': 'I+D, Diego Gajardo, Camilo Neira, Diego Morales',
     'website': 'https://www.holdconet.com',
-    'depends': ['stock'],
+    'depends': ['stock', 'web'],
     'data': [
         'security/ir.model.access.csv',
         'views/stock_inventory_report_views.xml',
