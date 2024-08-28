@@ -29,3 +29,17 @@ class StockInventoryReport(models.Model):
                 'date': date,
             })
         self.create(report_lines)
+
+    def get_inventory_summary(self):
+        # Aquí agregar la lógica para obtener el resumen del inventario
+        total_products = len(self.search([]))
+        total_quantity = sum(self.search([]).mapped('quantity'))
+        total_value = sum(self.search([]).mapped(lambda r: r.quantity * r.product_id.standard_price))
+        overdue_products = len(self.search([('date', '<', fields.Date.today())]))
+
+        return {
+            'total_products': total_products,
+            'total_quantity': total_quantity,
+            'total_value': total_value,
+            'overdue_products': overdue_products,
+        }
