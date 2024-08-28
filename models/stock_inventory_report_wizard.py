@@ -12,19 +12,43 @@ class StockInventoryReportWizard(models.TransientModel):
 
     def action_view_inventory_report(self):
         self.ensure_one()
-        
-        # Generar el reporte para la fecha seleccionada
-        self.env['stock.inventory.report'].generate_report(self.date)
-        
-        # Acción para abrir la vista del reporte
-        return {
+
+        # Obtener los movimientos de stock hasta la fecha seleccionada
+        stock_moves = self.env['stock.move'].search([('date', '<=', self.date), ('state', '=', 'done')])
+
+        # Preparar los datos para el reporte
+        inventory_data = {}
+        for move in stock_moves:
+            key = (move.product_id.id, move.location_id.id)
+            if key not in inventory_data:
+                inventory_data[key] = 0
+            if move.location_dest_id.id == move.location_id.id:
+                inventory_data[key] += move.product_qty
+            else:
+                inventory_data[key] -= move.product_qty
+
+        # Crear líneas del reporte
+        report_lines = []
+        for (product_id, location_id), quantity in inventory_data.items():
+            report_lines.append({
+                'product_id': product_id,
+                'location_id': location_id,
+                'quantity': quantity,
+                'date': self.date,
+            })
+
+        # Crear una vista temporal para mostrar los datos sin crear registros
+        action = {
             'type': 'ir.actions.act_window',
             'name': 'Reporte de Inventario a Fecha',
             'res_model': 'stock.inventory.report',
             'view_mode': 'tree',
+            'views': [[False, 'tree']],
+            'context': dict(self.env.context, default_date=self.date),
             'target': 'current',
-            'context': {'default_date': self.date},
         }
+        return action
+
 
     def action_export_inventory_report(self):
         self.ensure_one()
