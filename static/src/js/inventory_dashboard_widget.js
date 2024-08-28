@@ -24,3 +24,4 @@ export class InventoryDashboard extends Component {
         this.state.overdueProducts = result.overdue_products;
     }
 }
+
