@@ -1,10 +1,4 @@
 <odoo>
-    <template id="assets_backend" name="inventory_dashboard_assets" inherit_id="web.assets_backend">
-        <xpath expr="." position="inside">
-            <script type="module" src="/stock_inventory_report/static/src/js/inventory_dashboard.js"></script>
-            <link rel="stylesheet" href="/stock_inventory_report/static/src/css/inventory_dashboard.css"/>
-        </xpath>
-    </template>
 
     <!-- Añadir el componente OWL a la vista -->
     
