@@ -16,7 +16,7 @@
 
     'assets': {
         'web.assets_backend': [
-            '/stock_inventory_report/static/src/js/inventory_dashboard.js',
+            '/stock_inventory_report/static/src/js/inventory_dashboard_widget.js',
             '/stock_inventory_report/static/src/xml/inventory_dashboard_templates.xml',
             '/stock_inventory_report/static/src/css/inventory_dashboard.css',
         ],

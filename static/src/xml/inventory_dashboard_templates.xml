@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <odoo>
-    <templates id="template" xml:space="preserve">
+    <template id="inventory_dashboard_template" name="Inventory Dashboard">
         <t t-name="inventory.InventoryDashboard">
             <div class="o_dashboard">
                 <div class="o_dashboard_item">
@@ -21,5 +21,5 @@
                 </div>
             </div>
         </t>
-    </templates>
+    </template>
 </odoo>
