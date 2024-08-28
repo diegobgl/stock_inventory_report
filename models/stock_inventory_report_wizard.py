@@ -10,6 +10,22 @@ class StockInventoryReportWizard(models.TransientModel):
 
     date = fields.Date(string='Fecha de consulta', required=True, default=fields.Date.context_today)
 
+    def action_view_inventory_report(self):
+        self.ensure_one()
+        
+        # Generar el reporte para la fecha seleccionada
+        self.env['stock.inventory.report'].generate_report(self.date)
+        
+        # Acción para abrir la vista del reporte
+        return {
+            'type': 'ir.actions.act_window',
+            'name': 'Reporte de Inventario a Fecha',
+            'res_model': 'stock.inventory.report',
+            'view_mode': 'tree',
+            'target': 'current',
+            'context': {'default_date': self.date},
+        }
+
     def action_export_inventory_report(self):
         self.ensure_one()
 
