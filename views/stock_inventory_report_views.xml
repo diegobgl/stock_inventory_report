@@ -14,8 +14,8 @@
     </record>
 
     <!-- Incluir el Componente OWL en la vista de acción o tablero -->
-    <record id="action_stock_inventory_dashboard" model="ir.actions.client">
+    <!--record id="action_stock_inventory_dashboard" model="ir.actions.client">
         <field name="name">Dashboard de Inventario</field>
         <field name="tag">inventory.InventoryDashboard</field>
-    </record>
+    </!record-->
 </odoo>
