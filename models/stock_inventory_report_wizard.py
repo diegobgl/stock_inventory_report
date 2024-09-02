@@ -25,15 +25,15 @@ class StockInventoryReportWizard(models.TransientModel):
             unit_cost = product.standard_price if product else 0.0
             total_value = quantity * unit_cost
 
-            # Manejar el acceso a los lotes de manera segura
-            lot_name = None
+            # Obtener el ID del lote en lugar de su nombre
+            lot_id = None
             if move.move_line_ids and move.move_line_ids[0].lot_id:
-                lot_name = move.move_line_ids[0].lot_id.name
+                lot_id = move.move_line_ids[0].lot_id.id
 
             report_lines.append({
                 'product_id': product.id if product else False,
                 'location_id': location.id if location else False,
-                'lot_name': lot_name,
+                'lot_id': lot_id,  # Asegurarse de que este campo esté configurado para recibir un ID si es Many2one
                 'last_move_date': move.date,
                 'move_type': 'Compra' if move.picking_type_id.code == 'incoming' else 'Transferencia Interna',
                 'quantity': quantity,

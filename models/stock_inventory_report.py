@@ -2,11 +2,11 @@ from odoo import models, fields, api
 
 class StockInventoryReport(models.Model):
     _name = 'stock.inventory.report'
-    _description = 'Reporte de Inventario a Fecha Pasada'
+    _description = 'Línea del Informe de Inventario Histórico'
 
-    location_id = fields.Many2one('stock.location', string='Ubicación')
     product_id = fields.Many2one('product.product', string='Producto')
-    lot_name = fields.Many2one('stock.production.lot', string='Lote/Serie')
+    location_id = fields.Many2one('stock.location', string='Ubicación')
+    lot_id = fields.Many2one('stock.production.lot', string='Lote/Serie')  # Este debe estar como Many2one si recibe un ID
     last_move_date = fields.Datetime(string='Fecha Último Movimiento')
     move_type = fields.Selection([('Compra', 'Compra'), ('Transferencia Interna', 'Transferencia Interna')], string='Tipo de Movimiento')
     quantity = fields.Float(string='Cantidad')
@@ -17,7 +17,6 @@ class StockInventoryReport(models.Model):
     def _compute_total_value(self):
         for line in self:
             line.total_value = line.quantity * line.unit_value
-
 
     @api.model
     def generate_report(self, date):
