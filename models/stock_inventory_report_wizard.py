@@ -22,15 +22,19 @@ class StockInventoryReportWizard(models.TransientModel):
             product = move.product_id
             location = move.location_dest_id
             quantity = move.product_qty
-            unit_cost = product.standard_price
+            unit_cost = product.standard_price if product else 0.0
             total_value = quantity * unit_cost
 
-            # Obtener el lote desde las líneas del movimiento
-            lot_id = move.move_line_ids[0].lot_id.id if move.move_line_ids and move.move_line_ids[0].lot_id else None
+            # Validar si existe una línea de movimiento con lote
+            lot_id = None
+            if move.move_line_ids:
+                first_move_line = move.move_line_ids[0]
+                if first_move_line.lot_id:
+                    lot_id = first_move_line.lot_id.id
 
             report_lines.append({
-                'product_id': product.id,
-                'location_id': location.id,
+                'product_id': product.id if product else False,
+                'location_id': location.id if location else False,
                 'lot_id': lot_id,
                 'last_move_date': move.date,
                 'move_type': 'Compra' if move.picking_type_id.code == 'incoming' else 'Transferencia Interna',
@@ -51,7 +55,6 @@ class StockInventoryReportWizard(models.TransientModel):
             'target': 'current',
         }
 
-
     def action_export_inventory_report(self):
         self.ensure_one()
 
@@ -59,32 +62,46 @@ class StockInventoryReportWizard(models.TransientModel):
         stock_moves = self.env['stock.move'].search([('date', '<=', self.date), ('state', '=', 'done')])
 
         # Preparar los datos para el reporte
-        inventory_data = {}
+        inventory_data = []
         for move in stock_moves:
-            key = (move.product_id.id, move.location_id.id)
-            if key not in inventory_data:
-                inventory_data[key] = 0
-            if move.location_dest_id.id == move.location_id.id:
-                inventory_data[key] += move.product_qty
-            else:
-                inventory_data[key] -= move.product_qty
+            lot_name = move.move_line_ids[0].lot_id.name if move.move_line_ids and move.move_line_ids[0].lot_id else 'N/A'
+            move_type = 'Compra' if move.picking_type_id.code == 'incoming' else 'Transferencia Interna'
+            unit_value = move.product_id.standard_price
+            total_value = move.product_qty * unit_value
+
+            inventory_data.append({
+                'product_name': move.product_id.display_name,
+                'location_name': move.location_dest_id.display_name,
+                'lot_name': lot_name,
+                'last_move_date': move.date,
+                'move_type': move_type,
+                'quantity': move.product_qty,
+                'unit_value': unit_value,
+                'total_value': total_value,
+            })
 
         # Crear archivo Excel
         output = io.BytesIO()
         workbook = xlsxwriter.Workbook(output)
         sheet = workbook.add_worksheet('Inventario')
-        sheet.write(0, 0, 'Producto')
-        sheet.write(0, 1, 'Ubicación')
-        sheet.write(0, 2, 'Cantidad')
-        sheet.write(0, 3, 'Fecha')
+        headers = ['Producto', 'Ubicación', 'Lote/Serie', 'Fecha Último Movimiento', 'Tipo Movimiento', 
+                   'Cantidad', 'Valor Unitario', 'Valorizado']
+
+        # Escribir encabezados
+        for col, header in enumerate(headers):
+            sheet.write(0, col, header)
 
         # Escribir datos en Excel
         row = 1
-        for (product_id, location_id), quantity in inventory_data.items():
-            sheet.write(row, 0, self.env['product.product'].browse(product_id).display_name)
-            sheet.write(row, 1, self.env['stock.location'].browse(location_id).display_name)
-            sheet.write(row, 2, quantity)
-            sheet.write(row, 3, str(self.date))
+        for data in inventory_data:
+            sheet.write(row, 0, data['product_name'])
+            sheet.write(row, 1, data['location_name'])
+            sheet.write(row, 2, data['lot_name'])
+            sheet.write(row, 3, str(data['last_move_date']))
+            sheet.write(row, 4, data['move_type'])
+            sheet.write(row, 5, data['quantity'])
+            sheet.write(row, 6, data['unit_value'])
+            sheet.write(row, 7, data['total_value'])
             row += 1
 
         workbook.close()
