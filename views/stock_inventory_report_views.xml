@@ -7,7 +7,7 @@
             <tree string="Reporte de Inventario a Fecha">
                 <field name="location_id"/>
                 <field name="product_id"/>
-                <field name="lot_name"/>
+                <field name="lot_id"/>
                 <field name="last_move_date"/>
                 <field name="move_type"/>
                 <field name="quantity"/>
