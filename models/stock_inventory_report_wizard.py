@@ -25,10 +25,13 @@ class StockInventoryReportWizard(models.TransientModel):
             unit_cost = product.standard_price
             total_value = quantity * unit_cost
 
+            # Obtener el lote desde las líneas del movimiento
+            lot_id = move.move_line_ids[0].lot_id.id if move.move_line_ids and move.move_line_ids[0].lot_id else None
+
             report_lines.append({
                 'product_id': product.id,
                 'location_id': location.id,
-                'lot_id': move.lot_id.id if move.lot_id else None,
+                'lot_id': lot_id,
                 'last_move_date': move.date,
                 'move_type': 'Compra' if move.picking_type_id.code == 'incoming' else 'Transferencia Interna',
                 'quantity': quantity,
