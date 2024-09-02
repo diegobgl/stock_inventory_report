@@ -4,10 +4,20 @@ class StockInventoryReport(models.Model):
     _name = 'stock.inventory.report'
     _description = 'Reporte de Inventario a Fecha Pasada'
 
-    product_id = fields.Many2one('product.product', string='Producto', readonly=True)
-    location_id = fields.Many2one('stock.location', string='Ubicación', readonly=True)
-    quantity = fields.Float(string='Cantidad', readonly=True)
-    date = fields.Date(string='Fecha', readonly=True)
+    location_id = fields.Many2one('stock.location', string='Ubicación')
+    product_id = fields.Many2one('product.product', string='Producto')
+    lot_id = fields.Many2one('stock.production.lot', string='Lote/Serie')
+    last_move_date = fields.Datetime(string='Fecha Último Movimiento')
+    move_type = fields.Selection([('Compra', 'Compra'), ('Transferencia Interna', 'Transferencia Interna')], string='Tipo de Movimiento')
+    quantity = fields.Float(string='Cantidad')
+    unit_value = fields.Float(string='Valor Unitario')
+    total_value = fields.Float(string='Valorizado', compute='_compute_total_value')
+
+    @api.depends('quantity', 'unit_value')
+    def _compute_total_value(self):
+        for line in self:
+            line.total_value = line.quantity * line.unit_value
+
 
     @api.model
     def generate_report(self, date):

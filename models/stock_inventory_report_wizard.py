@@ -13,45 +13,41 @@ class StockInventoryReportWizard(models.TransientModel):
     def action_view_inventory_report(self):
         self.ensure_one()
 
-        # Limpiar registros previos para evitar duplicados
-        self.env['stock.inventory.report'].search([]).unlink()
-
-        # Obtener los movimientos de stock hasta la fecha seleccionada
+        # Buscar movimientos de inventario hasta la fecha seleccionada
         stock_moves = self.env['stock.move'].search([('date', '<=', self.date), ('state', '=', 'done')])
 
-        # Preparar los datos para el reporte
-        inventory_data = {}
-        for move in stock_moves:
-            key = (move.product_id.id, move.location_id.id)
-            if key not in inventory_data:
-                inventory_data[key] = 0
-            if move.location_dest_id.id == move.location_id.id:
-                inventory_data[key] += move.product_qty
-            else:
-                inventory_data[key] -= move.product_qty
-
-        # Crear registros del reporte
+        # Procesar datos del inventario
         report_lines = []
-        for (product_id, location_id), quantity in inventory_data.items():
+        for move in stock_moves:
+            product = move.product_id
+            location = move.location_dest_id
+            quantity = move.product_qty
+            unit_cost = product.standard_price
+            total_value = quantity * unit_cost
+
             report_lines.append({
-                'product_id': product_id,
-                'location_id': location_id,
+                'product_id': product.id,
+                'location_id': location.id,
+                'lot_id': move.lot_id.id if move.lot_id else None,
+                'last_move_date': move.date,
+                'move_type': 'Compra' if move.picking_type_id.code == 'incoming' else 'Transferencia Interna',
                 'quantity': quantity,
-                'date': self.date,
+                'unit_value': unit_cost,
+                'total_value': total_value,
             })
 
-        # Crear los registros en la base de datos
+        # Crear registros del reporte
         self.env['stock.inventory.report'].create(report_lines)
 
-        # Devolver la acción para mostrar la vista del reporte
+        # Mostrar la vista del reporte
         return {
             'type': 'ir.actions.act_window',
-            'name': 'Reporte de Inventario a Fecha',
+            'name': 'Informe de Inventario Histórico',
             'res_model': 'stock.inventory.report',
             'view_mode': 'tree',
             'target': 'current',
-            'context': {'default_date': self.date},
         }
+
 
     def action_export_inventory_report(self):
         self.ensure_one()
