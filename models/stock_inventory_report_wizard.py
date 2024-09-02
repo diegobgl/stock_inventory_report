@@ -25,15 +25,13 @@ class StockInventoryReportWizard(models.TransientModel):
             unit_cost = product.standard_price if product else 0.0
             total_value = quantity * unit_cost
 
-            # Obtener el ID del lote en lugar de su nombre
-            lot_id = None
-            if move.move_line_ids and move.move_line_ids[0].lot_id:
-                lot_id = move.move_line_ids[0].lot_id.id
+            # Obtener todos los nombres de lotes asociados al movimiento y concatenarlos
+            lot_names = ', '.join(move.move_line_ids.mapped('lot_id.name')) if move.move_line_ids else 'N/A'
 
             report_lines.append({
                 'product_id': product.id if product else False,
                 'location_id': location.id if location else False,
-                'lot_id': lot_id,  # Asegurarse de que este campo esté configurado para recibir un ID si es Many2one
+                'lot_name': lot_names,  # Concatenación de nombres de lotes
                 'last_move_date': move.date,
                 'move_type': 'Compra' if move.picking_type_id.code == 'incoming' else 'Transferencia Interna',
                 'quantity': quantity,
@@ -53,6 +51,7 @@ class StockInventoryReportWizard(models.TransientModel):
             'target': 'current',
         }
 
+
     def action_export_inventory_report(self):
         self.ensure_one()
 
@@ -62,7 +61,8 @@ class StockInventoryReportWizard(models.TransientModel):
         # Preparar los datos para el reporte
         inventory_data = []
         for move in stock_moves:
-            lot_name = move.move_line_ids[0].lot_id.name if move.move_line_ids and move.move_line_ids[0].lot_id else 'N/A'
+            # Agrupar nombres de lotes en una sola cadena separada por comas
+            lot_names = ', '.join(move.move_line_ids.mapped('lot_id.name')) if move.move_line_ids else 'N/A'
             move_type = 'Compra' if move.picking_type_id.code == 'incoming' else 'Transferencia Interna'
             unit_value = move.product_id.standard_price
             total_value = move.product_qty * unit_value
@@ -70,7 +70,7 @@ class StockInventoryReportWizard(models.TransientModel):
             inventory_data.append({
                 'product_name': move.product_id.display_name,
                 'location_name': move.location_dest_id.display_name,
-                'lot_name': lot_name,
+                'lot_name': lot_names,  # Agrupación de lotes
                 'last_move_date': move.date,
                 'move_type': move_type,
                 'quantity': move.product_qty,
@@ -82,7 +82,7 @@ class StockInventoryReportWizard(models.TransientModel):
         output = io.BytesIO()
         workbook = xlsxwriter.Workbook(output)
         sheet = workbook.add_worksheet('Inventario')
-        headers = ['Producto', 'Ubicación', 'Lote/Serie', 'Fecha Último Movimiento', 'Tipo Movimiento', 
+        headers = ['Producto', 'Ubicación', 'Lote/Serie', 'Fecha Último Movimiento', 'Tipo Movimiento',
                    'Cantidad', 'Valor Unitario', 'Valorizado']
 
         # Escribir encabezados
@@ -94,7 +94,7 @@ class StockInventoryReportWizard(models.TransientModel):
         for data in inventory_data:
             sheet.write(row, 0, data['product_name'])
             sheet.write(row, 1, data['location_name'])
-            sheet.write(row, 2, data['lot_name'])
+            sheet.write(row, 2, data['lot_name'])  # Columna de lotes agrupados
             sheet.write(row, 3, str(data['last_move_date']))
             sheet.write(row, 4, data['move_type'])
             sheet.write(row, 5, data['quantity'])
