@@ -13,7 +13,7 @@ class StockInventoryReportWizard(models.TransientModel):
     def action_view_inventory_report(self):
         self.ensure_one()
 
-        # Buscar movimientos de inventario hasta la fecha seleccionada
+        # Obtener los movimientos de inventario hasta la fecha seleccionada
         stock_moves = self.env['stock.move'].search([('date', '<=', self.date), ('state', '=', 'done')])
 
         # Procesar datos del inventario
@@ -25,17 +25,15 @@ class StockInventoryReportWizard(models.TransientModel):
             unit_cost = product.standard_price if product else 0.0
             total_value = quantity * unit_cost
 
-            # Validar si existe una línea de movimiento con lote
-            lot_id = None
-            if move.move_line_ids:
-                first_move_line = move.move_line_ids[0]
-                if first_move_line.lot_id:
-                    lot_id = first_move_line.lot_id.id
+            # Manejar el acceso a los lotes de manera segura
+            lot_name = None
+            if move.move_line_ids and move.move_line_ids[0].lot_id:
+                lot_name = move.move_line_ids[0].lot_id.name
 
             report_lines.append({
                 'product_id': product.id if product else False,
                 'location_id': location.id if location else False,
-                'lot_id': lot_id,
+                'lot_name': lot_name,
                 'last_move_date': move.date,
                 'move_type': 'Compra' if move.picking_type_id.code == 'incoming' else 'Transferencia Interna',
                 'quantity': quantity,
