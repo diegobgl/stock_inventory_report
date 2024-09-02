@@ -6,7 +6,7 @@ class StockInventoryReport(models.Model):
 
     location_id = fields.Many2one('stock.location', string='Ubicación')
     product_id = fields.Many2one('product.product', string='Producto')
-    lot_id = fields.Many2one('stock.production.lot', string='Lote/Serie')
+    lot_name = fields.Many2one('stock.production.lot', string='Lote/Serie')
     last_move_date = fields.Datetime(string='Fecha Último Movimiento')
     move_type = fields.Selection([('Compra', 'Compra'), ('Transferencia Interna', 'Transferencia Interna')], string='Tipo de Movimiento')
     quantity = fields.Float(string='Cantidad')
