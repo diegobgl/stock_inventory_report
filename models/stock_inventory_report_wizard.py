@@ -13,8 +13,21 @@ class StockInventoryReportWizard(models.TransientModel):
     def action_view_inventory_report(self):
         self.ensure_one()
 
-        # Obtener los movimientos de inventario hasta la fecha seleccionada
-        stock_moves = self.env['stock.move'].search([('date', '<=', self.date), ('state', '=', 'done')])
+        # Borrar registros anteriores
+        self.env['stock.inventory.report'].sudo().search([]).unlink()
+
+        # Filtrar las ubicaciones de tipo "Interna" y "Tránsito"
+        location_types = ['internal', 'transit']
+        valid_locations = self.env['stock.location'].search([('usage', 'in', location_types)])
+
+        # Obtener los movimientos de stock hasta la fecha seleccionada y que involucren las ubicaciones deseadas
+        stock_moves = self.env['stock.move'].search([
+            ('date', '<=', self.date),
+            ('state', '=', 'done'),
+            '|', 
+            ('location_id', 'in', valid_locations.ids),
+            ('location_dest_id', 'in', valid_locations.ids)
+        ])
 
         # Procesar datos del inventario
         report_lines = []
@@ -31,7 +44,7 @@ class StockInventoryReportWizard(models.TransientModel):
             report_lines.append({
                 'product_id': product.id if product else False,
                 'location_id': location.id if location else False,
-                'lot_name': lot_names,  # Concatenación de nombres de lotes
+                'lot_name': lot_names,
                 'last_move_date': move.date,
                 'move_type': 'Compra' if move.picking_type_id.code == 'incoming' else 'Transferencia Interna',
                 'quantity': quantity,
@@ -40,7 +53,7 @@ class StockInventoryReportWizard(models.TransientModel):
             })
 
         # Crear registros del reporte
-        self.env['stock.inventory.report'].create(report_lines)
+        self.env['stock.inventory.report'].sudo().create(report_lines)
 
         # Mostrar la vista del reporte
         return {
@@ -55,13 +68,25 @@ class StockInventoryReportWizard(models.TransientModel):
     def action_export_inventory_report(self):
         self.ensure_one()
 
-        # Obtener los movimientos de stock hasta la fecha seleccionada
-        stock_moves = self.env['stock.move'].search([('date', '<=', self.date), ('state', '=', 'done')])
+        # Borrar registros anteriores
+        self.env['stock.inventory.report'].sudo().search([]).unlink()
+
+        # Filtrar las ubicaciones de tipo "Interna" y "Tránsito"
+        location_types = ['internal', 'transit']
+        valid_locations = self.env['stock.location'].search([('usage', 'in', location_types)])
+
+        # Obtener los movimientos de stock hasta la fecha seleccionada y que involucren las ubicaciones deseadas
+        stock_moves = self.env['stock.move'].search([
+            ('date', '<=', self.date),
+            ('state', '=', 'done'),
+            '|', 
+            ('location_id', 'in', valid_locations.ids),
+            ('location_dest_id', 'in', valid_locations.ids)
+        ])
 
         # Preparar los datos para el reporte
         inventory_data = []
         for move in stock_moves:
-            # Agrupar nombres de lotes en una sola cadena separada por comas
             lot_names = ', '.join(move.move_line_ids.mapped('lot_id.name')) if move.move_line_ids else 'N/A'
             move_type = 'Compra' if move.picking_type_id.code == 'incoming' else 'Transferencia Interna'
             unit_value = move.product_id.standard_price
@@ -70,7 +95,7 @@ class StockInventoryReportWizard(models.TransientModel):
             inventory_data.append({
                 'product_name': move.product_id.display_name,
                 'location_name': move.location_dest_id.display_name,
-                'lot_name': lot_names,  # Agrupación de lotes
+                'lot_name': lot_names,
                 'last_move_date': move.date,
                 'move_type': move_type,
                 'quantity': move.product_qty,
@@ -94,7 +119,7 @@ class StockInventoryReportWizard(models.TransientModel):
         for data in inventory_data:
             sheet.write(row, 0, data['product_name'])
             sheet.write(row, 1, data['location_name'])
-            sheet.write(row, 2, data['lot_name'])  # Columna de lotes agrupados
+            sheet.write(row, 2, data['lot_name'])
             sheet.write(row, 3, str(data['last_move_date']))
             sheet.write(row, 4, data['move_type'])
             sheet.write(row, 5, data['quantity'])
@@ -107,7 +132,7 @@ class StockInventoryReportWizard(models.TransientModel):
         file_data = output.read()
 
         # Crear y devolver el archivo adjunto para su descarga
-        attachment = self.env['ir.attachment'].create({
+        attachment = self.env['ir.attachment'].sudo().create({
             'name': f'Reporte_Inventario_{self.date}.xlsx',
             'type': 'binary',
             'datas': base64.b64encode(file_data),
