@@ -8,14 +8,15 @@
                 <field name="product_id"/>
                 <field name="location_id"/>
                 <field name="quantity"/>
-                <field name="lot_id"/>
+                <field name="lot_id" invisible="context['hide_lot_id']"/> <!-- Se puede ocultar opcionalmente -->
                 <field name="date"/>
-                <field name="move_type"/> <!-- Tipo de movimiento -->
-                <field name="unit_value"/> <!-- Valor unitario -->
-                <field name="total_value"/> <!-- Valor total -->
+                <field name="move_type"/>
+                <field name="unit_value"/>
+                <field name="total_value"/>
             </tree>
         </field>
     </record>
+
 
     <!-- Acción para abrir la vista del reporte -->
     <record id="action_stock_inventory_report" model="ir.actions.act_window">

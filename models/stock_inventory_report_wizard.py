@@ -13,7 +13,7 @@ class StockInventoryReportWizard(models.TransientModel):
     def action_generate_report(self):
         stock_inventory_report = self.env['stock.inventory.report']
         stock_inventory_report.search([]).unlink()  # Limpiar el reporte previo
-        
+
         moves = self._get_stock_moves()  # Obtener los movimientos basados en los filtros
 
         for move in moves:
@@ -21,19 +21,19 @@ class StockInventoryReportWizard(models.TransientModel):
             for move_line in move.move_line_ids:
                 # Calcular el valor total basado en la cantidad y el valor unitario
                 unit_value = move.product_id.standard_price
-                total_value = move_line.quantity * unit_value  # Usar quantity en lugar de qty_done
-                
+                total_value = move_line.quantity * unit_value  # Usar el campo correcto de cantidad
+
+                # Crear el reporte asegurando que los campos Many2one tienen valores válidos
                 stock_inventory_report.create({
                     'product_id': move.product_id.id if move.product_id else False,
                     'location_id': move.location_id.id if move.location_id else False,
-                    'quantity': move_line.quantity,
-                    'lot_id': move_line.lot_id.id if move_line.lot_id else False,
+                    'quantity': move_line.quantity,  # Asegurarse de usar la cantidad correcta
+                    'lot_id': move_line.lot_id.id if move_line.lot_id else False,  # Comprobar si lot_id es válido
                     'date': move.date,
                     'move_type': move.picking_type_id.name if move.picking_type_id else move.reference,
                     'unit_value': unit_value,
                     'total_value': total_value,
                 })
-
 
         return {
             'type': 'ir.actions.act_window',
@@ -42,6 +42,7 @@ class StockInventoryReportWizard(models.TransientModel):
             'res_model': 'stock.inventory.report',
             'target': 'main',
         }
+
 
 
 
