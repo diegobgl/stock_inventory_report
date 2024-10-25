@@ -13,7 +13,6 @@ class StockInventoryReportWizard(models.TransientModel):
     lot_id = fields.Many2one('stock.production.lot', string="Lote", required=False)
 
 
-    _logger = logging.getLogger(__name__)
 
     def action_generate_report(self):
         stock_inventory_report = self.env['stock.inventory.report']
@@ -49,8 +48,6 @@ class StockInventoryReportWizard(models.TransientModel):
             'target': 'main',
         }
 
-# Obtener el logger de Odoo para registrar los errores
-    _logger = logging.getLogger(__name__)
 
     def _get_stock_moves(self):
         # Dominio para filtrar movimientos confirmados entre las fechas seleccionadas
