@@ -69,7 +69,7 @@ class StockInventoryReportWizard(models.TransientModel):
         # Agrupar por producto y ubicación
         moves = self.env['stock.move'].search([('state', '=', 'done')])
         for move in moves:
-            _logger.info(f"Move: {move.product_id.name}, Location: {move.location_id.name}, Quantity: {move.product_uom_qty}")
+            (f"Move: {move.product_id.name}, Location: {move.location_id.name}, Quantity: {move.product_uom_qty}")
 
         return moves
 
