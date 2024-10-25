@@ -22,7 +22,6 @@ class StockInventoryReportWizard(models.TransientModel):
         moves = self._get_stock_moves()  # Obtener los movimientos agrupados
 
         for move in moves:
-            # Verificar si hay información del movimiento y procesar
             product = move['product_id'][0] if move.get('product_id') else False
             location = move['location_id'][0] if move.get('location_id') else False
             date = move.get('date')
@@ -35,7 +34,11 @@ class StockInventoryReportWizard(models.TransientModel):
                 picking_type_record = self.env['stock.picking.type'].browse(picking_type)
 
                 unit_value = product_record.standard_price
-                total_value = quantity * unit_value  # Valor total del producto
+                total_value = quantity * unit_value
+
+                # Agrega un log para verificar la información que se va a crear
+                self._logger.info("Creando registro en stock.inventory.report: Producto %s, Ubicación %s, Cantidad %s, Valor %s",
+                                product_record.name, location_record.name, quantity, total_value)
 
                 stock_inventory_report.create({
                     'product_id': product_record.id,
@@ -62,7 +65,6 @@ class StockInventoryReportWizard(models.TransientModel):
     _logger = logging.getLogger(__name__)
 
     def _get_stock_moves(self):
-        # Dominio para filtrar movimientos confirmados entre las fechas seleccionadas
         domain = [('state', '=', 'done')]
         if self.date_from:
             domain.append(('date', '>=', self.date_from))
@@ -75,11 +77,12 @@ class StockInventoryReportWizard(models.TransientModel):
         if self.lot_id:
             domain.append(('lot_id', '=', self.lot_id.id))
 
-        # Agrupar por producto y ubicación para obtener el último movimiento
         moves = self.env['stock.move'].read_group(
             domain,
-            ['product_id', 'location_id', 'date:max', 'product_uom_qty:sum', 'picking_type_id'],
+            ['product_id', 'location_id', 'date:max', 'quantity_done:sum', 'picking_type_id'],
             ['product_id', 'location_id']
         )
 
+        self._logger.info("Movimientos obtenidos: %s", moves)  # Agrega este log
         return moves
+
