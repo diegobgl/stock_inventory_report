@@ -10,37 +10,37 @@ class StockInventoryReportWizard(models.TransientModel):
     product_id = fields.Many2one('product.product', string="Producto", required=False)
     lot_id = fields.Many2one('stock.production.lot', string="Lote", required=False)
 
-def action_generate_report(self):
-    stock_inventory_report = self.env['stock.inventory.report']
-    stock_inventory_report.search([]).unlink()  # Limpiar el reporte previo
-    
-    moves = self._get_stock_moves()  # Obtener los movimientos basados en los filtros
+    def action_generate_report(self):
+        stock_inventory_report = self.env['stock.inventory.report']
+        stock_inventory_report.search([]).unlink()  # Limpiar el reporte previo
+        
+        moves = self._get_stock_moves()  # Obtener los movimientos basados en los filtros
 
-    for move in moves:
-        # Para cada movimiento, iteramos sobre las líneas de movimiento
-        for move_line in move.move_line_ids:
-            # Calcular el valor total basado en la cantidad y el valor unitario
-            unit_value = move.product_id.standard_price
-            total_value = move_line.product_uom_qty * unit_value  # Cambiar qty_done a product_uom_qty
-            
-            stock_inventory_report.create({
-                'product_id': move.product_id.id,
-                'location_id': move.location_id.id,
-                'quantity': move_line.product_uom_qty,  # Usar product_uom_qty en lugar de qty_done
-                'lot_id': move_line.lot_id.id if move_line.lot_id else False,  # El lote se toma de stock.move.line
-                'date': move.date,
-                'move_type': move.picking_type_id.name or move.reference,  # Asignar tipo de movimiento
-                'unit_value': unit_value,  # Valor unitario del producto
-                'total_value': total_value,  # Valor total (cantidad * valor unitario)
-            })
+        for move in moves:
+            # Para cada movimiento, iteramos sobre las líneas de movimiento
+            for move_line in move.move_line_ids:
+                # Calcular el valor total basado en la cantidad y el valor unitario
+                unit_value = move.product_id.standard_price
+                total_value = move_line.product_uom_qty * unit_value  # Cambiar qty_done a product_uom_qty
+                
+                stock_inventory_report.create({
+                    'product_id': move.product_id.id,
+                    'location_id': move.location_id.id,
+                    'quantity': move_line.product_uom_qty,  # Usar product_uom_qty en lugar de qty_done
+                    'lot_id': move_line.lot_id.id if move_line.lot_id else False,  # El lote se toma de stock.move.line
+                    'date': move.date,
+                    'move_type': move.picking_type_id.name or move.reference,  # Asignar tipo de movimiento
+                    'unit_value': unit_value,  # Valor unitario del producto
+                    'total_value': total_value,  # Valor total (cantidad * valor unitario)
+                })
 
-    return {
-        'type': 'ir.actions.act_window',
-        'name': 'Reporte de Inventario',
-        'view_mode': 'tree',
-        'res_model': 'stock.inventory.report',
-        'target': 'main',
-    }
+        return {
+            'type': 'ir.actions.act_window',
+            'name': 'Reporte de Inventario',
+            'view_mode': 'tree',
+            'res_model': 'stock.inventory.report',
+            'target': 'main',
+        }
 
 
     def _get_stock_moves(self):
