@@ -17,20 +17,22 @@ class StockInventoryReportWizard(models.TransientModel):
         moves = self._get_stock_moves()  # Obtener los movimientos basados en los filtros
 
         for move in moves:
-            # Calcular el valor total basado en la cantidad y el valor unitario
-            unit_value = move.product_id.standard_price
-            total_value = move.product_uom_qty * unit_value
-            
-            stock_inventory_report.create({
-                'product_id': move.product_id.id,
-                'location_id': move.location_id.id,
-                'quantity': move.product_uom_qty,
-                'lot_id': move.lot_id.id if move.lot_id else False,
-                'date': move.date,
-                'move_type': move.picking_type_id.name or move.reference,  # Asignar tipo de movimiento
-                'unit_value': unit_value,  # Valor unitario del producto
-                'total_value': total_value,  # Valor total (cantidad * valor unitario)
-            })
+            # Para cada movimiento, iteramos sobre las líneas de movimiento
+            for move_line in move.move_line_ids:
+                # Calcular el valor total basado en la cantidad y el valor unitario
+                unit_value = move.product_id.standard_price
+                total_value = move_line.qty_done * unit_value
+                
+                stock_inventory_report.create({
+                    'product_id': move.product_id.id,
+                    'location_id': move.location_id.id,
+                    'quantity': move_line.qty_done,  # La cantidad se toma del stock.move.line
+                    'lot_id': move_line.lot_id.id if move_line.lot_id else False,  # El lote se toma de stock.move.line
+                    'date': move.date,
+                    'move_type': move.picking_type_id.name or move.reference,  # Asignar tipo de movimiento
+                    'unit_value': unit_value,  # Valor unitario del producto
+                    'total_value': total_value,  # Valor total (cantidad * valor unitario)
+                })
 
         return {
             'type': 'ir.actions.act_window',
