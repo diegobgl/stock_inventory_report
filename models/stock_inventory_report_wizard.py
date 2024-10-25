@@ -30,6 +30,8 @@ class StockInventoryReportWizard(models.TransientModel):
                 product_record = self.env['product.product'].browse(product[0])
                 location_record = self.env['stock.location'].browse(location[0])
 
+                _logger.info(f"Creating report entry for product: {product_record.name}, location: {location_record.name}, quantity: {quantity}")
+
                 # Crear registro en el reporte
                 stock_inventory_report.create({
                     'product_id': product_record.id,
@@ -46,9 +48,6 @@ class StockInventoryReportWizard(models.TransientModel):
             'res_model': 'stock.inventory.report',
             'target': 'main',
         }
-
-
-
 
 # Obtener el logger de Odoo para registrar los errores
     _logger = logging.getLogger(__name__)
@@ -68,11 +67,9 @@ class StockInventoryReportWizard(models.TransientModel):
             domain.append(('product_id', '=', self.product_id.id))
 
         # Agrupar por producto y ubicación
-        moves = self.env['stock.move'].read_group(
-            domain,
-            ['product_id', 'location_id', 'product_uom_qty:sum'],  # Cantidad total movida
-            ['product_id', 'location_id']  # Agrupamos por producto y ubicación
-        )
+        moves = self.env['stock.move'].search([('state', '=', 'done')])
+        for move in moves:
+            _logger.info(f"Move: {move.product_id.name}, Location: {move.location_id.name}, Quantity: {move.product_uom_qty}")
 
         return moves
 
