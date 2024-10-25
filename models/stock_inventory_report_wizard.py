@@ -79,9 +79,10 @@ class StockInventoryReportWizard(models.TransientModel):
 
         moves = self.env['stock.move'].read_group(
             domain,
-            ['product_id', 'location_id', 'date:max', 'quantity_done:sum', 'picking_type_id'],
+            ['product_id', 'location_id', 'date:max', 'product_uom_qty:sum', 'picking_type_id'],  # Cambié 'quantity_done:sum' a 'product_uom_qty:sum'
             ['product_id', 'location_id']
         )
+
 
         self._logger.info("Movimientos obtenidos: %s", moves)  # Agrega este log
         return moves
