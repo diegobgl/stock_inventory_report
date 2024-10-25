@@ -24,15 +24,16 @@ class StockInventoryReportWizard(models.TransientModel):
                 total_value = move_line.quantity * unit_value  # Usar quantity en lugar de qty_done
                 
                 stock_inventory_report.create({
-                    'product_id': move.product_id.id,
-                    'location_id': move.location_id.id,
-                    'quantity': move_line.quantity,  # Usar quantity para la cantidad movida
-                    'lot_id': move_line.lot_id.id if move_line.lot_id else False,  # El lote se toma de stock.move.line
+                    'product_id': move.product_id.id if move.product_id else False,
+                    'location_id': move.location_id.id if move.location_id else False,
+                    'quantity': move_line.quantity,
+                    'lot_id': move_line.lot_id.id if move_line.lot_id else False,
                     'date': move.date,
-                    'move_type': move.picking_type_id.name or move.reference,  # Asignar tipo de movimiento
-                    'unit_value': unit_value,  # Valor unitario del producto
-                    'total_value': total_value,  # Valor total (cantidad * valor unitario)
+                    'move_type': move.picking_type_id.name if move.picking_type_id else move.reference,
+                    'unit_value': unit_value,
+                    'total_value': total_value,
                 })
+
 
         return {
             'type': 'ir.actions.act_window',
