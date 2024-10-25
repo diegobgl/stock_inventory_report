@@ -19,35 +19,37 @@ class StockInventoryReportWizard(models.TransientModel):
         stock_inventory_report = self.env['stock.inventory.report']
         stock_inventory_report.search([]).unlink()  # Limpiar el reporte previo
 
-        moves = self._get_stock_moves()  # Obtener los movimientos basados en los filtros
+        moves = self._get_stock_moves()  # Obtener los movimientos agrupados
 
         for move in moves:
-            # Para cada movimiento, iteramos sobre las líneas de movimiento
-            for move_line in move.move_line_ids:
-                try:
-                    # Calcular el valor total basado en la cantidad y el valor unitario
-                    unit_value = move.product_id.standard_price
-                    total_value = move_line.quantity * unit_value  # Usar el campo correcto de cantidad
+            # Verificar si hay información del movimiento y procesar
+            product = move.get('product_id')
+            location = move.get('location_id')
+            date = move.get('date')
+            quantity = move.get('quantity_done')
+            picking_type = move.get('picking_type_id')
 
-                    # Crear el reporte sin lot_id
-                    stock_inventory_report.create({
-                        'product_id': move.product_id.id if move.product_id else False,
-                        'location_id': move.location_id.id if move.location_id else False,
-                        'quantity': move_line.quantity,  # Asegurarse de usar la cantidad correcta
-                        'date': move.date,
-                        'move_type': move.picking_type_id.name if move.picking_type_id else move.reference,
-                        'unit_value': unit_value,
-                        'total_value': total_value,
-                    })
+            if product and location and date:
+                product_record = self.env['product.product'].browse(product[0])
+                location_record = self.env['stock.location'].browse(location[0])
+                picking_type_record = self.env['stock.picking.type'].browse(picking_type[0])
 
-                except AttributeError as e:
-                    # Registrar el error y continuar el ciclo sin detener el proceso
-                    _logger.error("Error generando reporte para el movimiento %s: %s", move.name, str(e))
-                    continue
+                unit_value = product_record.standard_price
+                total_value = quantity * unit_value  # Valor total del producto
+
+                stock_inventory_report.create({
+                    'product_id': product_record.id,
+                    'location_id': location_record.id,
+                    'quantity': quantity,
+                    'date': date,
+                    'move_type': 'Compra' if picking_type_record.code == 'incoming' else 'Traslado Interno',
+                    'unit_value': unit_value,
+                    'total_value': total_value,
+                })
 
         return {
             'type': 'ir.actions.act_window',
-            'name': 'Reporte de Inventario',
+            'name': 'Reporte de Inventario Histórico',
             'view_mode': 'tree',
             'res_model': 'stock.inventory.report',
             'target': 'main',
@@ -55,14 +57,13 @@ class StockInventoryReportWizard(models.TransientModel):
 
 
 
+
 # Obtener el logger de Odoo para registrar los errores
     _logger = logging.getLogger(__name__)
 
     def _get_stock_moves(self):
-        # Filtramos los movimientos de stock con el ORM según los parámetros seleccionados
-        domain = [('state', '=', 'done')]  # Solo movimientos confirmados
-        
-        # Aplicar filtros del wizard
+        # Dominio para filtrar movimientos confirmados entre las fechas seleccionadas
+        domain = [('state', '=', 'done')]
         if self.date_from:
             domain.append(('date', '>=', self.date_from))
         if self.date_to:
@@ -73,6 +74,12 @@ class StockInventoryReportWizard(models.TransientModel):
             domain.append(('product_id', '=', self.product_id.id))
         if self.lot_id:
             domain.append(('lot_id', '=', self.lot_id.id))
-        
-        # Retornar los movimientos filtrados
-        return self.env['stock.move'].search(domain)
+
+        # Agrupar por producto y ubicación para obtener el último movimiento
+        moves = self.env['stock.move'].read_group(
+            domain,
+            ['product_id', 'location_id', 'date:max', 'quantity_done:sum', 'picking_type_id'],
+            ['product_id', 'location_id']
+        )
+
+        return moves
