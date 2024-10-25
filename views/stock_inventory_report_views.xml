@@ -8,7 +8,6 @@
                 <field name="product_id"/>
                 <field name="location_id"/>
                 <field name="quantity"/>
-                <field name="lot_id" invisible="context['hide_lot_id']"/> <!-- Se puede ocultar opcionalmente -->
                 <field name="date"/>
                 <field name="move_type"/>
                 <field name="unit_value"/>

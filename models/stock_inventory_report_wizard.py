@@ -29,12 +29,11 @@ class StockInventoryReportWizard(models.TransientModel):
                     unit_value = move.product_id.standard_price
                     total_value = move_line.quantity * unit_value  # Usar el campo correcto de cantidad
 
-                    # Crear el reporte asegurando que los campos Many2one tienen valores válidos
+                    # Crear el reporte sin lot_id
                     stock_inventory_report.create({
                         'product_id': move.product_id.id if move.product_id else False,
                         'location_id': move.location_id.id if move.location_id else False,
                         'quantity': move_line.quantity,  # Asegurarse de usar la cantidad correcta
-                        'lot_id': move_line.lot_id.id if move_line.lot_id else False,  # Comprobar si lot_id es válido
                         'date': move.date,
                         'move_type': move.picking_type_id.name if move.picking_type_id else move.reference,
                         'unit_value': unit_value,
@@ -44,7 +43,6 @@ class StockInventoryReportWizard(models.TransientModel):
                 except AttributeError as e:
                     # Registrar el error y continuar el ciclo sin detener el proceso
                     _logger.error("Error generando reporte para el movimiento %s: %s", move.name, str(e))
-                    # Omitir este registro pero continuar el proceso con los siguientes movimientos
                     continue
 
         return {
@@ -54,8 +52,6 @@ class StockInventoryReportWizard(models.TransientModel):
             'res_model': 'stock.inventory.report',
             'target': 'main',
         }
-
-
 
 
 
