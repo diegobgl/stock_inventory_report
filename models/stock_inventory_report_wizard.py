@@ -78,7 +78,7 @@ class StockInventoryReportWizard(models.TransientModel):
         # Agrupar por producto y ubicación para obtener el último movimiento
         moves = self.env['stock.move'].read_group(
             domain,
-            ['product_id', 'location_id', 'date:max', 'quantity_done:sum', 'picking_type_id'],
+            ['product_id', 'location_id', 'date:max', 'product_uom_qty:sum', 'picking_type_id'],
             ['product_id', 'location_id']
         )
 
