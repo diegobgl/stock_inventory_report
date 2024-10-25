@@ -23,16 +23,16 @@ class StockInventoryReportWizard(models.TransientModel):
 
         for move in moves:
             # Verificar si hay información del movimiento y procesar
-            product = move.get('product_id')
-            location = move.get('location_id')
+            product = move['product_id'][0] if move.get('product_id') else False
+            location = move['location_id'][0] if move.get('location_id') else False
             date = move.get('date')
-            quantity = move.get('quantity_done')
-            picking_type = move.get('picking_type_id')
+            quantity = move.get('quantity_done', 0)
+            picking_type = move['picking_type_id'][0] if move.get('picking_type_id') else False
 
             if product and location and date:
-                product_record = self.env['product.product'].browse(product[0])
-                location_record = self.env['stock.location'].browse(location[0])
-                picking_type_record = self.env['stock.picking.type'].browse(picking_type[0])
+                product_record = self.env['product.product'].browse(product)
+                location_record = self.env['stock.location'].browse(location)
+                picking_type_record = self.env['stock.picking.type'].browse(picking_type)
 
                 unit_value = product_record.standard_price
                 total_value = quantity * unit_value  # Valor total del producto
