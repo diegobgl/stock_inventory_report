@@ -1,148 +1,60 @@
-from odoo import models, fields, _
-from odoo.exceptions import UserError
-import base64
-import io
-import xlsxwriter
+from odoo import api, fields, models
 
 class StockInventoryReportWizard(models.TransientModel):
     _name = 'stock.inventory.report.wizard'
-    _description = 'Wizard para consultar inventario a una fecha pasada'
+    _description = 'Wizard para generar reporte de inventario'
 
-    date = fields.Date(string='Fecha de consulta', required=True, default=fields.Date.context_today)
+    date_from = fields.Date(string="Desde la fecha", required=True)
+    date_to = fields.Date(string="Hasta la fecha", required=True)
+    location_id = fields.Many2one('stock.location', string="Ubicación", required=False)
+    product_id = fields.Many2one('product.product', string="Producto", required=False)
+    lot_id = fields.Many2one('stock.production.lot', string="Lote", required=False)
 
-    def action_view_inventory_report(self):
-        self.ensure_one()
+    def action_generate_report(self):
+        stock_inventory_report = self.env['stock.inventory.report']
+        stock_inventory_report.search([]).unlink()  # Limpiar el reporte previo
+        
+        moves = self._get_stock_moves()  # Obtener los movimientos basados en los filtros
 
-        # Borrar registros anteriores
-        self.env['stock.inventory.report'].sudo().search([]).unlink()
-
-        # Filtrar las ubicaciones de tipo "Interna" y "Tránsito"
-        location_types = ['internal', 'transit']
-        valid_locations = self.env['stock.location'].search([('usage', 'in', location_types)])
-
-        # Obtener los movimientos de stock hasta la fecha seleccionada y que involucren las ubicaciones deseadas
-        stock_moves = self.env['stock.move'].search([
-            ('date', '<=', self.date),
-            ('state', '=', 'done'),
-            '|', 
-            ('location_id', 'in', valid_locations.ids),
-            ('location_dest_id', 'in', valid_locations.ids)
-        ])
-
-        # Procesar datos del inventario
-        report_lines = []
-        for move in stock_moves:
-            product = move.product_id
-            location = move.location_dest_id
-            quantity = move.product_qty
-            unit_cost = product.standard_price if product else 0.0
-            total_value = quantity * unit_cost
-
-            # Obtener todos los nombres de lotes asociados al movimiento y concatenarlos
-            lot_names = ', '.join(move.move_line_ids.mapped('lot_id.name')) if move.move_line_ids else 'N/A'
-
-            report_lines.append({
-                'product_id': product.id if product else False,
-                'location_id': location.id if location else False,
-                'lot_name': lot_names,
-                'last_move_date': move.date,
-                'move_type': 'Compra' if move.picking_type_id.code == 'incoming' else 'Transferencia Interna',
-                'quantity': quantity,
-                'unit_value': unit_cost,
-                'total_value': total_value,
+        for move in moves:
+            # Calcular el valor total basado en la cantidad y el valor unitario
+            unit_value = move.product_id.standard_price
+            total_value = move.product_uom_qty * unit_value
+            
+            stock_inventory_report.create({
+                'product_id': move.product_id.id,
+                'location_id': move.location_id.id,
+                'quantity': move.product_uom_qty,
+                'lot_id': move.lot_id.id if move.lot_id else False,
+                'date': move.date,
+                'move_type': move.picking_type_id.name or move.reference,  # Asignar tipo de movimiento
+                'unit_value': unit_value,  # Valor unitario del producto
+                'total_value': total_value,  # Valor total (cantidad * valor unitario)
             })
 
-        # Crear registros del reporte
-        self.env['stock.inventory.report'].sudo().create(report_lines)
-
-        # Mostrar la vista del reporte
         return {
             'type': 'ir.actions.act_window',
-            'name': 'Informe de Inventario Histórico',
-            'res_model': 'stock.inventory.report',
+            'name': 'Reporte de Inventario',
             'view_mode': 'tree',
-            'target': 'current',
+            'res_model': 'stock.inventory.report',
+            'target': 'main',
         }
 
-
-    def action_export_inventory_report(self):
-        self.ensure_one()
-
-        # Borrar registros anteriores
-        self.env['stock.inventory.report'].sudo().search([]).unlink()
-
-        # Filtrar las ubicaciones de tipo "Interna" y "Tránsito"
-        location_types = ['internal', 'transit']
-        valid_locations = self.env['stock.location'].search([('usage', 'in', location_types)])
-
-        # Obtener los movimientos de stock hasta la fecha seleccionada y que involucren las ubicaciones deseadas
-        stock_moves = self.env['stock.move'].search([
-            ('date', '<=', self.date),
-            ('state', '=', 'done'),
-            '|', 
-            ('location_id', 'in', valid_locations.ids),
-            ('location_dest_id', 'in', valid_locations.ids)
-        ])
-
-        # Preparar los datos para el reporte
-        inventory_data = []
-        for move in stock_moves:
-            lot_names = ', '.join(move.move_line_ids.mapped('lot_id.name')) if move.move_line_ids else 'N/A'
-            move_type = 'Compra' if move.picking_type_id.code == 'incoming' else 'Transferencia Interna'
-            unit_value = move.product_id.standard_price
-            total_value = move.product_qty * unit_value
-
-            inventory_data.append({
-                'product_name': move.product_id.display_name,
-                'location_name': move.location_dest_id.display_name,
-                'lot_name': lot_names,
-                'last_move_date': move.date,
-                'move_type': move_type,
-                'quantity': move.product_qty,
-                'unit_value': unit_value,
-                'total_value': total_value,
-            })
-
-        # Crear archivo Excel
-        output = io.BytesIO()
-        workbook = xlsxwriter.Workbook(output)
-        sheet = workbook.add_worksheet('Inventario')
-        headers = ['Producto', 'Ubicación', 'Lote/Serie', 'Fecha Último Movimiento', 'Tipo Movimiento',
-                   'Cantidad', 'Valor Unitario', 'Valorizado']
-
-        # Escribir encabezados
-        for col, header in enumerate(headers):
-            sheet.write(0, col, header)
-
-        # Escribir datos en Excel
-        row = 1
-        for data in inventory_data:
-            sheet.write(row, 0, data['product_name'])
-            sheet.write(row, 1, data['location_name'])
-            sheet.write(row, 2, data['lot_name'])
-            sheet.write(row, 3, str(data['last_move_date']))
-            sheet.write(row, 4, data['move_type'])
-            sheet.write(row, 5, data['quantity'])
-            sheet.write(row, 6, data['unit_value'])
-            sheet.write(row, 7, data['total_value'])
-            row += 1
-
-        workbook.close()
-        output.seek(0)
-        file_data = output.read()
-
-        # Crear y devolver el archivo adjunto para su descarga
-        attachment = self.env['ir.attachment'].sudo().create({
-            'name': f'Reporte_Inventario_{self.date}.xlsx',
-            'type': 'binary',
-            'datas': base64.b64encode(file_data),
-            'store_fname': f'Reporte_Inventario_{self.date}.xlsx',
-            'mimetype': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        })
-
-        # Devolver acción para descargar el archivo
-        return {
-            'type': 'ir.actions.act_url',
-            'url': f'/web/content/{attachment.id}?download=true',
-            'target': 'new',
-        }
+    def _get_stock_moves(self):
+        # Filtramos los movimientos de stock con el ORM según los parámetros seleccionados
+        domain = [('state', '=', 'done')]  # Solo movimientos confirmados
+        
+        # Aplicar filtros del wizard
+        if self.date_from:
+            domain.append(('date', '>=', self.date_from))
+        if self.date_to:
+            domain.append(('date', '<=', self.date_to))
+        if self.location_id:
+            domain.append(('location_id', '=', self.location_id.id))
+        if self.product_id:
+            domain.append(('product_id', '=', self.product_id.id))
+        if self.lot_id:
+            domain.append(('lot_id', '=', self.lot_id.id))
+        
+        # Retornar los movimientos filtrados
+        return self.env['stock.move'].search(domain)

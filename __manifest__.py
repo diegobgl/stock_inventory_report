@@ -22,6 +22,7 @@
     #         '/stock_inventory_report/static/src/css/inventory_dashboard.css',
     #     ],
     # },
+     
     'installable': True,
     'application': False,
     'license': 'LGPL-3',
