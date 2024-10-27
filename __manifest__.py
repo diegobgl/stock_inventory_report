@@ -4,7 +4,7 @@
     'category': 'Inventory',
     'summary': 'Permite consultar el inventario a una fecha pasada',
     'description': "Módulo para consultar el inventario a una fecha específica, con vista de lista, wizard para seleccionar la fecha y exportación a Excel.",
-    'author': 'I+D, Diego Gajardo, Camilo Neira, Diego Morales',
+    'author': 'I+D, Diego Gajardo,',
     'website': 'https://www.holdconet.com',
     'depends': ['stock', 'web'],
     'data': [
