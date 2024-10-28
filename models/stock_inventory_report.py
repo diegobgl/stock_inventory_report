@@ -13,7 +13,7 @@ class StockInventoryDateReport(models.Model):
     last_move_date = fields.Datetime(string="Fecha Último Movimiento")  # Fecha del último movimiento
     move_type = fields.Char(string="Tipo Movimiento")  # Tipo de movimiento: Compra o Transferencia Interna
 
-    @api.depends('quantity', 'unit_value')
+ #   @api.depends('quantity', 'unit_value')
     def _compute_total_value(self):
         for record in self:
             record.total_value = record.quantity * record.unit_value
