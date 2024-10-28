@@ -3,7 +3,7 @@ from datetime import datetime
 
 class StockInventoryDateReportWizard(models.TransientModel):
     _name = 'stock.inventory.report.wizard'
-    _description = 'Wizard para obtener inventario a una fecha sin recalcular entradas/salidas'
+    _description = 'Wizard para obtener inventario a una fecha '
 
     date_to = fields.Date(string="Hasta la fecha", required=True)
     location_id = fields.Many2one('stock.location', string="Ubicación", required=False)
