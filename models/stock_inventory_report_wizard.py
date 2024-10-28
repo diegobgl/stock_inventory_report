@@ -84,14 +84,18 @@ class StockInventoryDateReportWizard(models.TransientModel):
                     product_value[(destination_location_id, product_id)] = {
                         'total_value': 0, 'total_qty': 0}
 
-                # Asignar el precio calculado (precio promedio ponderado de ubicaciones internas)
+                # **Ajuste clave aquí**: si es una ubicación de tránsito y el precio es 0, asignamos el precio promedio calculado de ubicaciones internas
                 if move.location_dest_id.usage == 'transit' and not move.price_unit:
-                    # Si el movimiento no tiene precio unitario (precio = 0), usamos el promedio de internas
-                    avg_internal_price = product_value[(destination_location_id, product_id)]['total_value'] / (product_value[(destination_location_id, product_id)]['total_qty'] or 1)
+                    # Calculamos el precio promedio en ubicaciones internas
+                    if (destination_location_id, product_id) in product_value and product_value[(destination_location_id, product_id)]['total_qty'] > 0:
+                        avg_internal_price = product_value[(destination_location_id, product_id)]['total_value'] / product_value[(destination_location_id, product_id)]['total_qty']
+                    else:
+                        avg_internal_price = move.product_id.standard_price  # Asignamos el precio estándar como respaldo
                     move_price_unit = avg_internal_price
                 else:
                     move_price_unit = move.price_unit
 
+                # Actualizamos los valores en el diccionario
                 product_value[(destination_location_id, product_id)]['total_value'] += move.product_uom_qty * move_price_unit
                 product_value[(destination_location_id, product_id)]['total_qty'] += move.product_uom_qty
 
