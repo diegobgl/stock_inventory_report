@@ -95,8 +95,12 @@ class StockInventoryReportWizard(models.TransientModel):
                 product_value[(destination_location_id, product_id)]['total_value'] += move.product_uom_qty * move_price_unit
                 product_value[(destination_location_id, product_id)]['total_qty'] += move.product_uom_qty
 
-                # Almacenar el lote/número de serie, si existe
-                lot_name = move.lot_id.name if move.lot_id else ''
+                # **Ajuste clave aquí**: Obtener el lote/número de serie desde las líneas del movimiento (move_line_ids)
+                lot_name = ''
+                for move_line in move.move_line_ids:
+                    if move_line.lot_id:
+                        lot_name = move_line.lot_id.name
+                        break  # Tomamos el primer lote encontrado para simplificar
                 product_lots[(destination_location_id, product_id)] = lot_name
 
                 # Almacenar la fecha del último movimiento
