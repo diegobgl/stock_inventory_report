@@ -34,6 +34,31 @@ class StockInventoryDateReportWizard(models.TransientModel):
             'res_model': 'stock.inventory.date.report',
             'target': 'main',
         }
+    def action_generate_report(self):
+        stock_inventory_report = self.env['stock.inventory.date.report']
+        stock_inventory_report.search([]).unlink()  # Limpiar el reporte previo
+
+        quants = self._get_stock_at_date()  # Obtener stock a la fecha seleccionada
+
+        for quant in quants:
+            location = quant['location_id']
+            product = quant['product_id']
+            quantity = quant['quantity']
+
+            # Crear el registro del reporte con los datos obtenidos
+            stock_inventory_report.create({
+                'location_id': location.id,
+                'product_id': product.id,
+                'quantity': quantity,
+            })
+
+        return {
+            'type': 'ir.actions.act_window',
+            'name': 'Reporte de Inventario a Fecha',
+            'view_mode': 'tree',
+            'res_model': 'stock.inventory.date.report',
+            'target': 'main',
+        }
 
     def _get_stock_at_date(self):
         date_to = self.date_to
@@ -61,14 +86,15 @@ class StockInventoryDateReportWizard(models.TransientModel):
             location_id = move.location_id.id
             destination_location_id = move.location_dest_id.id
 
-            # Si el movimiento es una salida, restamos la cantidad
+            # Incluir ubicaciones de tránsito y ubicaciones internas para entradas y salidas
             if move.location_id.usage in ['internal', 'transit']:
+                # Si es una salida desde una ubicación interna o de tránsito, restamos la cantidad
                 if (location_id, product_id) not in product_qty:
                     product_qty[(location_id, product_id)] = 0
                 product_qty[(location_id, product_id)] -= move.product_uom_qty
 
-            # Si el movimiento es una entrada, sumamos la cantidad
             if move.location_dest_id.usage in ['internal', 'transit']:
+                # Si es una entrada a una ubicación interna o de tránsito, sumamos la cantidad
                 if (destination_location_id, product_id) not in product_qty:
                     product_qty[(destination_location_id, product_id)] = 0
                 product_qty[(destination_location_id, product_id)] += move.product_uom_qty
@@ -84,3 +110,4 @@ class StockInventoryDateReportWizard(models.TransientModel):
                 })
 
         return result
+
