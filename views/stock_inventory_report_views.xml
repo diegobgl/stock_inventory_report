@@ -19,7 +19,7 @@
     <!-- Acción para abrir la vista del reporte -->
     <record id="action_stock_inventory_report" model="ir.actions.act_window">
         <field name="name">Reporte de Inventario Histórico</field>
-        <field name="res_model">stock.inventory.report</field>
+        <field name="res_model">stock.inventory.date.report</field>
         <field name="view_mode">tree</field>
         <field name="target">main</field>
     </record>
