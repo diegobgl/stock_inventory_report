@@ -1,15 +1,13 @@
 from odoo import models, fields, api
 from datetime import datetime
 
-class StockInventoryDateReportWizard(models.TransientModel):
+class StockInventoryReportWizard(models.TransientModel):
     _name = 'stock.inventory.report.wizard'
-    _description = 'Wizard para obtener inventario a una fecha '
+    _description = 'Wizard para generar reporte de inventario a una fecha con detalles'
 
     date_to = fields.Date(string="Hasta la fecha", required=True)
     location_id = fields.Many2one('stock.location', string="Ubicación", required=False)
     product_id = fields.Many2one('product.product', string="Producto", required=False)
-
-
 
     def action_generate_report(self):
         stock_inventory_report = self.env['stock.inventory.date.report']
@@ -22,6 +20,9 @@ class StockInventoryDateReportWizard(models.TransientModel):
             product = quant['product_id']
             quantity = quant['quantity']
             unit_value = quant['unit_value']  # Precio promedio calculado
+            lot_name = quant.get('lot_name', '')  # Lote o número de serie
+            last_move_date = quant.get('last_move_date', '')  # Fecha del último movimiento
+            move_type = quant.get('move_type', '')  # Tipo de movimiento
 
             # Crear el registro del reporte con los datos obtenidos
             stock_inventory_report.create({
@@ -29,7 +30,10 @@ class StockInventoryDateReportWizard(models.TransientModel):
                 'product_id': product.id,
                 'quantity': quantity,
                 'unit_value': unit_value,  # Precio unitario promedio
-                'total_value': unit_value * quantity  # Valor total
+                'total_value': unit_value * quantity,  # Valor total
+                'lot_name': lot_name,  # Lote/Serie
+                'last_move_date': last_move_date,  # Fecha del último movimiento
+                'move_type': move_type,  # Tipo de movimiento
             })
 
         return {
@@ -61,6 +65,9 @@ class StockInventoryDateReportWizard(models.TransientModel):
 
         product_qty = {}
         product_value = {}  # Para calcular el valor total y el promedio ponderado
+        product_lots = {}  # Para almacenar los lotes o números de serie
+        product_last_move = {}  # Para almacenar la fecha del último movimiento
+        product_move_type = {}  # Para almacenar el tipo del último movimiento
 
         for move in moves:
             product_id = move.product_id.id
@@ -79,25 +86,28 @@ class StockInventoryDateReportWizard(models.TransientModel):
                     product_qty[(destination_location_id, product_id)] = 0
                 product_qty[(destination_location_id, product_id)] += move.product_uom_qty
 
-                # Calculamos el valor total de la entrada
+                # Asignar el precio calculado o el precio estándar si no hay movimientos previos
                 if (destination_location_id, product_id) not in product_value:
                     product_value[(destination_location_id, product_id)] = {
                         'total_value': 0, 'total_qty': 0}
+                move_price_unit = move.price_unit or move.product_id.standard_price
 
-                # **Ajuste clave aquí**: si es una ubicación de tránsito y el precio es 0, asignamos el precio promedio calculado de ubicaciones internas
-                if move.location_dest_id.usage == 'transit' and not move.price_unit:
-                    # Calculamos el precio promedio en ubicaciones internas
-                    if (destination_location_id, product_id) in product_value and product_value[(destination_location_id, product_id)]['total_qty'] > 0:
-                        avg_internal_price = product_value[(destination_location_id, product_id)]['total_value'] / product_value[(destination_location_id, product_id)]['total_qty']
-                    else:
-                        avg_internal_price = move.product_id.standard_price  # Asignamos el precio estándar como respaldo
-                    move_price_unit = avg_internal_price
-                else:
-                    move_price_unit = move.price_unit
-
-                # Actualizamos los valores en el diccionario
                 product_value[(destination_location_id, product_id)]['total_value'] += move.product_uom_qty * move_price_unit
                 product_value[(destination_location_id, product_id)]['total_qty'] += move.product_uom_qty
+
+                # Almacenar el lote/número de serie, si existe
+                lot_name = move.lot_id.name if move.lot_id else ''
+                product_lots[(destination_location_id, product_id)] = lot_name
+
+                # Almacenar la fecha del último movimiento
+                product_last_move[(destination_location_id, product_id)] = move.date
+
+                # Determinar el tipo de movimiento
+                if move.picking_type_id.code == 'incoming':
+                    move_type = 'Compra'
+                else:
+                    move_type = 'Transferencia Interna'
+                product_move_type[(destination_location_id, product_id)] = move_type
 
         # 2. Transformar el resultado en una lista de diccionarios para generar el reporte
         result = []
@@ -111,8 +121,10 @@ class StockInventoryDateReportWizard(models.TransientModel):
                     'location_id': self.env['stock.location'].browse(location_id),
                     'product_id': self.env['product.product'].browse(product_id),
                     'quantity': qty,
-                    'unit_value': unit_value  # Precio promedio
+                    'unit_value': unit_value,  # Precio promedio
+                    'lot_name': product_lots.get((location_id, product_id), ''),
+                    'last_move_date': product_last_move.get((location_id, product_id), ''),
+                    'move_type': product_move_type.get((location_id, product_id), '')
                 })
 
         return result
-
