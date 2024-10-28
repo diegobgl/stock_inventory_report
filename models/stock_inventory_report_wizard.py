@@ -3,6 +3,11 @@ import logging
 
 _logger = logging.getLogger(__name__)
 
+from odoo import api, fields, models
+import logging
+
+_logger = logging.getLogger(__name__)
+
 class StockInventoryReportWizard(models.TransientModel):
     _name = 'stock.inventory.report.wizard'
     _description = 'Wizard para generar reporte de inventario'
@@ -39,7 +44,6 @@ class StockInventoryReportWizard(models.TransientModel):
         }
 
     def _get_stock_between_dates(self):
-        # Obtenemos las fechas seleccionadas por el usuario
         date_from = self.date_from
         date_to = self.date_to
 
@@ -54,48 +58,49 @@ class StockInventoryReportWizard(models.TransientModel):
         if self.location_id:
             domain.append(('location_id', '=', self.location_id.id))
 
-        # Buscar movimientos de stock hasta la fecha de inicio para calcular el stock inicial
-        initial_moves = self.env['stock.move'].search([
-            ('state', '=', 'done'),
-            ('date', '<', date_from)  # Movimientos antes de la fecha de inicio para stock inicial
-        ] + domain)
-
-        # Buscar movimientos de stock entre la fecha de inicio y la fecha de fin
-        moves_between_dates = self.env['stock.move'].search([
-            ('state', '=', 'done'),
-            ('date', '>=', date_from),
-            ('date', '<=', date_to)  # Movimientos entre la fecha de inicio y fin
+        # 1. Obtener el stock inicial en la fecha de inicio
+        initial_stock = self.env['stock.quant'].search([
+            ('location_id.usage', 'in', ['internal', 'transit']),
+            ('quantity', '>', 0),
         ] + domain)
 
         product_qty = {}
+        for quant in initial_stock:
+            product_id = quant.product_id.id
+            location_id = quant.location_id.id
 
-        # Calcular el stock inicial antes de la fecha de inicio
-        for move in initial_moves:
-            product_id = move.product_id.id
-            location_id = move.location_id.id
-            qty_change = move.product_uom_qty if move.location_dest_id.usage in ['internal', 'transit'] else -move.product_uom_qty
-
-            # Inicializar si no está en el diccionario
             if (location_id, product_id) not in product_qty:
                 product_qty[(location_id, product_id)] = 0
+            product_qty[(location_id, product_id)] += quant.quantity
 
-            # Acumular el stock inicial
-            product_qty[(location_id, product_id)] += qty_change
+        # 2. Aplicar las entradas y salidas de stock entre la fecha de inicio y la fecha final
+        moves = self.env['stock.move'].search([
+            ('state', '=', 'done'),
+            ('date', '>=', date_from),
+            ('date', '<=', date_to),
+            '|',
+            ('location_id.usage', 'in', ['internal', 'transit']),
+            ('location_dest_id.usage', 'in', ['internal', 'transit']),
+        ] + domain)
 
-        # Aplicar las entradas y salidas entre las fechas de inicio y fin
-        for move in moves_between_dates:
+        for move in moves:
             product_id = move.product_id.id
             location_id = move.location_id.id
-            qty_change = move.product_uom_qty if move.location_dest_id.usage in ['internal', 'transit'] else -move.product_uom_qty
+            destination_location_id = move.location_dest_id.id
 
-            # Inicializar si no está en el diccionario
-            if (location_id, product_id) not in product_qty:
-                product_qty[(location_id, product_id)] = 0
+            # Restar si es una salida de la ubicación interna o tránsito
+            if move.location_id.usage in ['internal', 'transit']:
+                if (location_id, product_id) not in product_qty:
+                    product_qty[(location_id, product_id)] = 0
+                product_qty[(location_id, product_id)] -= move.product_uom_qty
 
-            # Acumular las entradas y salidas
-            product_qty[(location_id, product_id)] += qty_change
+            # Sumar si es una entrada a la ubicación interna o tránsito
+            if move.location_dest_id.usage in ['internal', 'transit']:
+                if (destination_location_id, product_id) not in product_qty:
+                    product_qty[(destination_location_id, product_id)] = 0
+                product_qty[(destination_location_id, product_id)] += move.product_uom_qty
 
-        # Transformar el resultado en una lista de diccionarios para generar el reporte
+        # 3. Transformar el resultado en una lista de diccionarios para generar el reporte
         result = []
         for (location_id, product_id), qty in product_qty.items():
             if qty > 0:  # Solo mostrar productos con stock positivo
@@ -108,25 +113,32 @@ class StockInventoryReportWizard(models.TransientModel):
         return result
 
 
-    def _get_stock_moves(self):
-        # Dominio para filtrar movimientos confirmados entre las fechas seleccionadas
-        domain = [('state', '=', 'done')]
+    # def _get_stock_moves(self):
+    #     # Dominio para filtrar movimientos confirmados entre las fechas seleccionadas
+    #     domain = [('state', '=', 'done')]
         
-        # Aplicar los filtros de fechas, ubicación y producto
-        if self.date_from:
-            domain.append(('date', '>=', self.date_from))
-        if self.date_to:
-            domain.append(('date', '<=', self.date_to))
-        if self.location_id:
-            domain.append(('location_id', '=', self.location_id.id))
-        if self.product_id:
-            domain.append(('product_id', '=', self.product_id.id))
-
-        # Buscar movimientos de stock que cumplan con los criterios
-        moves = self.env['stock.move'].search(domain)
+    #     # Aplicar los filtros de fechas
+    #     if self.date_from:
+    #         domain.append(('date', '>=', self.date_from))
+    #     if self.date_to:
+    #         domain.append(('date', '<=', self.date_to))
         
-        # Registrar información de los movimientos encontrados
-        for move in moves:
-            _logger.info(f"Move: {move.product_id.name}, Location: {move.location_id.name}, Quantity: {move.product_uom_qty}")
+    #     # Aplicar los filtros de ubicación (tanto origen como destino)
+    #     if self.location_id:
+    #         domain.append('|')
+    #         domain.append(('location_id', '=', self.location_id.id))  # Salida de la ubicación
+    #         domain.append(('location_dest_id', '=', self.location_id.id))  # Entrada a la ubicación
+        
+    #     # Filtrar por producto
+    #     if self.product_id:
+    #         domain.append(('product_id', '=', self.product_id.id))
 
-        return moves
+    #     # Buscar movimientos de stock que cumplan con los criterios
+    #     moves = self.env['stock.move'].search(domain)
+        
+    #     # Registrar información de los movimientos encontrados
+    #     for move in moves:
+    #         move_type = 'Entrada' if move.location_dest_id.id == self.location_id.id else 'Salida'
+    #         _logger.info(f"Movimiento: {move_type} | Producto: {move.product_id.name} | Ubicación: {move.location_id.name} -> {move.location_dest_id.name} | Cantidad: {move.product_uom_qty}")
+
+    #     return moves
