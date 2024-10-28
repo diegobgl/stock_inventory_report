@@ -5,8 +5,8 @@
         <field name="model">stock.inventory.report</field>
         <field name="arch" type="xml">
             <tree string="Reporte de Inventario Histórico" decoration-danger="quantity &lt; 0">
-                <field name="product_id" string="Producto" />
                 <field name="location_id" string="Ubicación" />
+                <field name="product_id" string="Producto" />
                 <field name="quantity" string="Cantidad" widget="float" />
                 <!--field name="date" string="Fecha Movimiento" /-->
                 <!--field name="move_type" string="Tipo Movimiento" /-->
