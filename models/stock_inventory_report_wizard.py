@@ -77,7 +77,7 @@ class StockInventoryReportWizard(models.TransientModel):
         moves = self.env['stock.move'].search([
             ('state', '=', 'done'),
             ('date', '>=', date_from),
-            ('date', '<=', date_to),
+            ('date', '<=', date_to),  # Solo movimientos hasta la fecha final (date_to)
             '|',
             ('location_id.usage', 'in', ['internal', 'transit']),
             ('location_dest_id.usage', 'in', ['internal', 'transit']),
@@ -89,13 +89,13 @@ class StockInventoryReportWizard(models.TransientModel):
             destination_location_id = move.location_dest_id.id
 
             # Restar si es una salida de la ubicación interna o tránsito
-            if move.location_id.usage in ['internal', 'transit']:
+            if move.date <= date_to and move.location_id.usage in ['internal', 'transit']:
                 if (location_id, product_id) not in product_qty:
                     product_qty[(location_id, product_id)] = 0
                 product_qty[(location_id, product_id)] -= move.product_uom_qty
 
             # Sumar si es una entrada a la ubicación interna o tránsito
-            if move.location_dest_id.usage in ['internal', 'transit']:
+            if move.date <= date_to and move.location_dest_id.usage in ['internal', 'transit']:
                 if (destination_location_id, product_id) not in product_qty:
                     product_qty[(destination_location_id, product_id)] = 0
                 product_qty[(destination_location_id, product_id)] += move.product_uom_qty
@@ -111,6 +111,7 @@ class StockInventoryReportWizard(models.TransientModel):
                 })
 
         return result
+
 
 
     # def _get_stock_moves(self):
