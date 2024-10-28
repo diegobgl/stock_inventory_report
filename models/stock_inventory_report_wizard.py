@@ -83,8 +83,16 @@ class StockInventoryDateReportWizard(models.TransientModel):
                 if (destination_location_id, product_id) not in product_value:
                     product_value[(destination_location_id, product_id)] = {
                         'total_value': 0, 'total_qty': 0}
-                
-                product_value[(destination_location_id, product_id)]['total_value'] += move.product_uom_qty * move.price_unit
+
+                # Asignar el precio calculado (precio promedio ponderado de ubicaciones internas)
+                if move.location_dest_id.usage == 'transit' and not move.price_unit:
+                    # Si el movimiento no tiene precio unitario (precio = 0), usamos el promedio de internas
+                    avg_internal_price = product_value[(destination_location_id, product_id)]['total_value'] / (product_value[(destination_location_id, product_id)]['total_qty'] or 1)
+                    move_price_unit = avg_internal_price
+                else:
+                    move_price_unit = move.price_unit
+
+                product_value[(destination_location_id, product_id)]['total_value'] += move.product_uom_qty * move_price_unit
                 product_value[(destination_location_id, product_id)]['total_qty'] += move.product_uom_qty
 
         # 2. Transformar el resultado en una lista de diccionarios para generar el reporte
@@ -103,3 +111,4 @@ class StockInventoryDateReportWizard(models.TransientModel):
                 })
 
         return result
+
