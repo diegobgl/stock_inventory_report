@@ -10,8 +10,8 @@
                 <field name="quantity" string="Cantidad" widget="float" />
                 <!--field name="date" string="Fecha Movimiento" /-->
                 <!--field name="move_type" string="Tipo Movimiento" /-->
-                <!--field name="unit_value" string="Valor Unitario" widget="monetary" /-->
-                <!--field name="total_value" string="Valor Total" widget="monetary" /-->
+                <field name="unit_value" string="Valor Unitario" widget="monetary" />
+                <field name="total_value" string="Valor Total" widget="monetary" />
             </tree>
         </field>
     </record>
