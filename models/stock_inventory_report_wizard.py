@@ -1,34 +1,39 @@
 from odoo import models, fields, api
+from datetime import datetime
 
 class StockInventoryReportWizard(models.TransientModel):
     _name = 'stock.inventory.report.wizard'
-    _description = 'Wizard para generar reporte de inventario a una fecha'
+    _description = 'Wizard para generar reporte de inventario a una fecha con detalles'
 
-    date_from = fields.Datetime(string="Desde la fecha", required=True)
-    date_to = fields.Datetime(string="Hasta la fecha", required=True)
-    product_id = fields.Many2one('product.product', string="Producto")
-    location_id = fields.Many2one('stock.location', string="Ubicación")
-    
+    date_to = fields.Date(string="Hasta la fecha", required=True)
+    location_id = fields.Many2one('stock.location', string="Ubicación", required=False)
+    product_id = fields.Many2one('product.product', string="Producto", required=False)
+
     def action_generate_report(self):
-        # Limpiar reportes previos
         stock_inventory_report = self.env['stock.inventory.date.report']
-        stock_inventory_report.search([]).unlink()
+        stock_inventory_report.search([]).unlink()  # Limpiar el reporte previo
 
-        # Obtener el stock inicial hasta la fecha seleccionada
-        stock_initial = self._get_initial_stock()
+        quants = self._get_stock_at_date()  # Obtener stock a la fecha seleccionada
 
-        # Ajustar el stock con los movimientos de entrada y salida
-        final_stock = self._get_stock_movements(stock_initial)
+        for quant in quants:
+            location = quant['location_id']
+            product = quant['product_id']
+            quantity = quant['quantity']
+            unit_value = quant['unit_value']  # Precio promedio calculado
+            lot_name = quant.get('lot_name', '')  # Lote o número de serie
+            last_move_date = quant.get('last_move_date', '')  # Fecha del último movimiento
+            move_type = quant.get('move_type', '')  # Tipo de movimiento
 
-        # Insertar los resultados en el reporte
-        for record in final_stock:
+            # Crear el registro del reporte con los datos obtenidos
             stock_inventory_report.create({
-                'location_id': record['location_id'],
-                'product_id': record['product_id'],
-                'quantity': record['quantity'],
-                'lot_name': record.get('lot_name', ''),
-                'last_move_date': record.get('last_move_date', None),
-                'move_type': record.get('move_type', ''),
+                'location_id': location.id,
+                'product_id': product.id,
+                'quantity': quantity,
+                'unit_value': unit_value,  # Precio unitario promedio
+                'total_value': unit_value * quantity,  # Valor total
+                'lot_name': lot_name,  # Lote/Serie
+                'last_move_date': last_move_date,  # Fecha del último movimiento
+                'move_type': move_type,  # Tipo de movimiento
             })
 
         return {
@@ -39,65 +44,87 @@ class StockInventoryReportWizard(models.TransientModel):
             'target': 'main',
         }
 
-    def _get_initial_stock(self):
-        """ Obtener el stock inicial basado en los quants hasta la fecha de inicio """
-        domain = [('create_date', '<=', self.date_from)]
+    def _get_stock_at_date(self):
+        date_to = self.date_to
+
+        # Dominio básico para obtener los movimientos confirmados antes de la fecha
+        domain_moves = [('state', '=', 'done'), ('date', '<=', date_to)]
+
+        # Filtrar por producto si está seleccionado
         if self.product_id:
-            domain.append(('product_id', '=', self.product_id.id))
+            domain_moves.append(('product_id', '=', self.product_id.id))
+
+        # Filtrar por ubicación si está seleccionada
         if self.location_id:
-            domain.append(('location_id', '=', self.location_id.id))
+            domain_moves.append('|')
+            domain_moves.append(('location_id', '=', self.location_id.id))
+            domain_moves.append(('location_dest_id', '=', self.location_id.id))
 
-        quants = self.env['stock.quant'].search(domain)
-        stock_initial = {}
+        # 1. Obtener los movimientos hasta la fecha seleccionada (entradas y salidas)
+        moves = self.env['stock.move'].search(domain_moves)
 
-        for quant in quants:
-            key = (quant.product_id.id, quant.lot_id.id, quant.location_id.id)
-            if key not in stock_initial:
-                stock_initial[key] = {
-                    'location_id': quant.location_id.id,
-                    'product_id': quant.product_id.id,
-                    'quantity': quant.quantity,
-                    'lot_name': quant.lot_id.name if quant.lot_id else '',
-                    'last_move_date': quant.in_date,
-                    'move_type': 'Stock Inicial'
-                }
-        return stock_initial
+        product_qty = {}
+        product_value = {}  # Para calcular el valor total y el promedio ponderado
+        product_lots = {}  # Para almacenar los lotes o números de serie
+        product_last_move = {}  # Para almacenar la fecha del último movimiento
+        product_move_type = {}  # Para almacenar el tipo del último movimiento
 
-    def _get_stock_movements(self, stock_initial):
-        """ Obtener los movimientos de stock dentro del rango de fechas y ajustar el stock inicial """
-        domain = [
-            ('state', '=', 'done'),
-            ('date', '>=', self.date_from),
-            ('date', '<=', self.date_to),
-        ]
-        if self.product_id:
-            domain.append(('product_id', '=', self.product_id.id))
-        if self.location_id:
-            domain.append('|')
-            domain.append(('location_id', '=', self.location_id.id))
-            domain.append(('location_dest_id', '=', self.location_id.id))
+        for move in moves:
+            product_id = move.product_id.id
+            location_id = move.location_id.id
+            destination_location_id = move.location_dest_id.id
 
-        stock_moves = self.env['stock.move'].search(domain)
+            # Si el movimiento es una salida, restamos la cantidad
+            if move.location_id.usage in ['internal', 'transit']:
+                if (location_id, product_id) not in product_qty:
+                    product_qty[(location_id, product_id)] = 0
+                product_qty[(location_id, product_id)] -= move.product_uom_qty
 
-        for move in stock_moves:
-            for move_line in move.move_line_ids:
-                key = (move.product_id.id, move_line.lot_id.id, move_line.location_id.id)
+            # Si el movimiento es una entrada, sumamos la cantidad y registramos el valor
+            if move.location_dest_id.usage in ['internal', 'transit']:
+                if (destination_location_id, product_id) not in product_qty:
+                    product_qty[(destination_location_id, product_id)] = 0
+                product_qty[(destination_location_id, product_id)] += move.product_uom_qty
 
-                # Si el producto está en el stock inicial, ajustamos su cantidad
-                if key in stock_initial:
-                    if move_line.location_dest_id.id == self.location_id.id:
-                        stock_initial[key]['quantity'] += move_line.qty_done  # Entrada
-                    elif move_line.location_id.id == self.location_id.id:
-                        stock_initial[key]['quantity'] -= move_line.qty_done  # Salida
+                # Asignar el precio calculado o el precio estándar si no hay movimientos previos
+                if (destination_location_id, product_id) not in product_value:
+                    product_value[(destination_location_id, product_id)] = {
+                        'total_value': 0, 'total_qty': 0}
+                move_price_unit = move.price_unit or move.product_id.standard_price
+
+                product_value[(destination_location_id, product_id)]['total_value'] += move.product_uom_qty * move_price_unit
+                product_value[(destination_location_id, product_id)]['total_qty'] += move.product_uom_qty
+
+                # Almacenar el lote/número de serie, si existe
+                lot_name = move.lot_id.name if move.lot_id else ''
+                product_lots[(destination_location_id, product_id)] = lot_name
+
+                # Almacenar la fecha del último movimiento
+                product_last_move[(destination_location_id, product_id)] = move.date
+
+                # Determinar el tipo de movimiento
+                if move.picking_type_id.code == 'incoming':
+                    move_type = 'Compra'
                 else:
-                    # Si no está en el stock inicial, lo agregamos como nuevo
-                    stock_initial[key] = {
-                        'location_id': move_line.location_dest_id.id if move_line.location_dest_id.id == self.location_id.id else move_line.location_id.id,
-                        'product_id': move.product_id.id,
-                        'quantity': move_line.qty_done if move_line.location_dest_id.id == self.location_id.id else -move_line.qty_done,
-                        'lot_name': move_line.lot_id.name if move_line.lot_id else '',
-                        'last_move_date': move.date,
-                        'move_type': 'Compra' if move.picking_type_id.code == 'incoming' else 'Transferencia Interna',
-                    }
+                    move_type = 'Transferencia Interna'
+                product_move_type[(destination_location_id, product_id)] = move_type
 
-        return stock_initial.values()
+        # 2. Transformar el resultado en una lista de diccionarios para generar el reporte
+        result = []
+        for (location_id, product_id), qty in product_qty.items():
+            if qty > 0:  # Solo mostrar productos con stock positivo
+                total_value = product_value[(location_id, product_id)]['total_value']
+                total_qty = product_value[(location_id, product_id)]['total_qty']
+                unit_value = total_value / total_qty if total_qty > 0 else 0  # Precio promedio ponderado
+
+                result.append({
+                    'location_id': self.env['stock.location'].browse(location_id),
+                    'product_id': self.env['product.product'].browse(product_id),
+                    'quantity': qty,
+                    'unit_value': unit_value,  # Precio promedio
+                    'lot_name': product_lots.get((location_id, product_id), ''),
+                    'last_move_date': product_last_move.get((location_id, product_id), ''),
+                    'move_type': product_move_type.get((location_id, product_id), '')
+                })
+
+        return result
