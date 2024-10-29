@@ -56,11 +56,44 @@ class StockInventoryReportWizard(models.TransientModel):
                 }
             stock_initial[key]['quantity'] += quant.quantity
             stock_initial[key]['total_value'] += quant.quantity * quant.product_id.standard_price
-        
+
+        # **Aplicar ajustes iniciales explícitamente**
+        stock_initial = self._apply_inventory_adjustments(stock_initial)
+
+        return stock_initial
+
+    def _apply_inventory_adjustments(self, stock_initial):
+        """Aplicar ajustes de inventario iniciales que impacten el stock"""
+        # Buscar ajustes de inventario antes de la fecha seleccionada
+        domain_inventory_adjustments = [
+            ('state', '=', 'done'),
+            ('date', '<=', self.date_to)
+        ]
+
+        # Filtrar por producto si está seleccionado
+        if self.product_id:
+            domain_inventory_adjustments.append(('product_id', '=', self.product_id.id))
+
+        # Filtrar por ubicación si está seleccionada
+        if self.location_id:
+            domain_inventory_adjustments.append(('location_id', '=', self.location_id.id))
+
+        inventory_adjustments = self.env['stock.inventory'].search(domain_inventory_adjustments)
+
+        for adjustment in inventory_adjustments:
+            for line in adjustment.line_ids:
+                key = (line.location_id.id, line.product_id.id)
+                if key not in stock_initial:
+                    stock_initial[key] = {'quantity': 0, 'unit_value': line.product_id.standard_price, 'total_value': 0}
+                
+                # Aplicar la cantidad ajustada al stock inicial
+                stock_initial[key]['quantity'] += line.product_qty
+                stock_initial[key]['total_value'] += line.product_qty * line.product_id.standard_price
+
         return stock_initial
 
     def _adjust_stock_with_moves(self, stock_initial):
-        """Ajustar el stock inicial con los movimientos de entradas y salidas, incluyendo ajustes negativos"""
+        """Ajustar el stock inicial con los movimientos de entradas y salidas"""
         date_to = self.date_to
         domain_moves = [('state', '=', 'done'), ('date', '<=', date_to)]
 
@@ -96,21 +129,21 @@ class StockInventoryReportWizard(models.TransientModel):
                 stock_initial[key]['quantity'] += move.product_uom_qty
                 stock_initial[key]['total_value'] += move.product_uom_qty * move.price_unit
 
-            # **Evitar duplicados en movimientos internos**
-            # Si es un movimiento entre transit y internal, lo contamos solo una vez como entrada o salida.
-            if (move.location_id.usage == 'internal' and move.location_dest_id.usage == 'transit'):
-                # Esto es una salida de una ubicación interna a tránsito
-                key = (location_id, product_id)
-                if key in stock_initial:
-                    stock_initial[key]['quantity'] -= move.product_uom_qty
-                    stock_initial[key]['total_value'] -= move.product_uom_qty * move.price_unit
-            elif (move.location_id.usage == 'transit' and move.location_dest_id.usage == 'internal'):
-                # Esto es una entrada desde una ubicación de tránsito a una interna
+            # Ajuste de stock en ubicaciones internas y de tránsito
+            if move.location_dest_id.usage in ['internal', 'transit']:
                 key = (destination_location_id, product_id)
                 if key not in stock_initial:
                     stock_initial[key] = {'quantity': 0, 'unit_value': move.price_unit, 'total_value': 0}
                 stock_initial[key]['quantity'] += move.product_uom_qty
                 stock_initial[key]['total_value'] += move.product_uom_qty * move.price_unit
+
+            # Si es una salida desde una ubicación interna o de tránsito
+            if move.location_id.usage in ['internal', 'transit'] and move.location_dest_id.usage == 'virtual':
+                key = (location_id, product_id)
+                if key not in stock_initial:
+                    stock_initial[key] = {'quantity': 0, 'unit_value': move.price_unit, 'total_value': 0}
+                stock_initial[key]['quantity'] -= move.product_uom_qty
+                stock_initial[key]['total_value'] -= move.product_uom_qty * move.price_unit
 
         return stock_initial
 
