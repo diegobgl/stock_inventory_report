@@ -13,10 +13,10 @@ class StockInventoryReportWizard(models.TransientModel):
         stock_inventory_report = self.env['stock.inventory.date.report']
         stock_inventory_report.search([]).unlink()  # Limpiar el reporte previo
 
-        # Obtener el stock inicial a través de los quants
+        # Obtener el stock inicial (incluye quants negativos)
         stock_initial = self._get_initial_stock()
 
-        # Obtener los movimientos históricos y ajustar el stock
+        # Ajustar el stock con los movimientos (incluye salidas y entradas)
         stock_final = self._adjust_stock_with_moves(stock_initial)
 
         # Crear registros del reporte
@@ -31,9 +31,9 @@ class StockInventoryReportWizard(models.TransientModel):
         }
 
     def _get_initial_stock(self):
-        """Obtener el stock inicial desde los quants en las ubicaciones seleccionadas"""
-        domain_quants = [('quantity', '>', 0)]
-        
+        """Obtener el stock inicial desde los quants, incluyendo quants negativos"""
+        domain_quants = []
+
         # Filtrar por producto si está seleccionado
         if self.product_id:
             domain_quants.append(('product_id', '=', self.product_id.id))
@@ -42,6 +42,7 @@ class StockInventoryReportWizard(models.TransientModel):
         if self.location_id:
             domain_quants.append(('location_id', '=', self.location_id.id))
 
+        # Incluir tanto quants positivos como negativos
         quants = self.env['stock.quant'].search(domain_quants)
         stock_initial = {}
         
@@ -59,7 +60,7 @@ class StockInventoryReportWizard(models.TransientModel):
         return stock_initial
 
     def _adjust_stock_with_moves(self, stock_initial):
-        """Ajustar el stock inicial con los movimientos de entradas y salidas"""
+        """Ajustar el stock inicial con los movimientos de entradas y salidas, incluyendo ajustes negativos"""
         date_to = self.date_to
         domain_moves = [('state', '=', 'done'), ('date', '<=', date_to)]
 
@@ -80,20 +81,36 @@ class StockInventoryReportWizard(models.TransientModel):
             location_id = move.location_id.id
             destination_location_id = move.location_dest_id.id
 
-            # Si es una salida, restamos
-            if move.location_id.usage == 'internal' and move.location_dest_id.usage == 'virtual':
+            # Si es una salida (ubicación interna o de tránsito)
+            if move.location_dest_id.usage == 'virtual':
                 key = (location_id, product_id)
                 if key in stock_initial:
                     stock_initial[key]['quantity'] -= move.product_uom_qty
                     stock_initial[key]['total_value'] -= move.product_uom_qty * move.price_unit
 
-            # Si es una entrada, sumamos
-            if move.location_id.usage == 'virtual' and move.location_dest_id.usage in ['internal', 'transit']:
+            # Si es una entrada desde una ubicación virtual
+            elif move.location_id.usage == 'virtual' and move.location_dest_id.usage in ['internal', 'transit']:
                 key = (destination_location_id, product_id)
                 if key not in stock_initial:
                     stock_initial[key] = {'quantity': 0, 'unit_value': move.price_unit, 'total_value': 0}
                 stock_initial[key]['quantity'] += move.product_uom_qty
                 stock_initial[key]['total_value'] += move.product_uom_qty * move.price_unit
+
+            # Ajustar para las ubicaciones internas y de tránsito
+            if move.location_dest_id.usage in ['internal', 'transit']:
+                key = (destination_location_id, product_id)
+                if key not in stock_initial:
+                    stock_initial[key] = {'quantity': 0, 'unit_value': move.price_unit, 'total_value': 0}
+                stock_initial[key]['quantity'] += move.product_uom_qty
+                stock_initial[key]['total_value'] += move.product_uom_qty * move.price_unit
+
+            # Si es una salida desde una ubicación interna o de tránsito
+            if move.location_id.usage in ['internal', 'transit'] and move.location_dest_id.usage == 'virtual':
+                key = (location_id, product_id)
+                if key not in stock_initial:
+                    stock_initial[key] = {'quantity': 0, 'unit_value': move.price_unit, 'total_value': 0}
+                stock_initial[key]['quantity'] -= move.product_uom_qty
+                stock_initial[key]['total_value'] -= move.product_uom_qty * move.price_unit
 
         return stock_initial
 
