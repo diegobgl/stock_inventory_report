@@ -3,7 +3,7 @@ from datetime import datetime
 
 class StockInventoryReportWizard(models.TransientModel):
     _name = 'stock.inventory.report.wizard'
-    _description = 'Wizard para generar reporte de inventario a una fecha con recalculo de ajustes negativos'
+    _description = 'Wizard para generar reporte de inventario a una fecha excluyendo ubicaciones de producción'
 
     date_to = fields.Date(string="Hasta la fecha", required=True)
     location_id = fields.Many2one('stock.location', string="Ubicación", required=False)
@@ -82,10 +82,10 @@ class StockInventoryReportWizard(models.TransientModel):
             if (location_id, product_id) not in stock_initial:
                 stock_initial[(location_id, product_id)] = 0
 
-            if move.location_id.usage in ['internal', 'production', 'transit']:
+            if move.location_id.usage in ['internal', 'transit']:  # Excluir 'production'
                 stock_initial[(location_id, product_id)] -= move.product_uom_qty
 
-            if move.location_dest_id.usage in ['internal', 'production', 'transit']:
+            if move.location_dest_id.usage in ['internal', 'transit']:  # Excluir 'production'
                 if (destination_location_id, product_id) not in stock_initial:
                     stock_initial[(destination_location_id, product_id)] = 0
                 stock_initial[(destination_location_id, product_id)] += move.product_uom_qty
@@ -143,7 +143,7 @@ class StockInventoryReportWizard(models.TransientModel):
 
         # Buscar quants hasta la fecha actual para obtener el stock inicial
         quants = self.env['stock.quant'].search([
-            ('location_id.usage', 'in', ['internal', 'transit']),  # Ubicaciones internas y en tránsito
+            ('location_id.usage', 'in', ['internal', 'transit']),  # Excluir 'production', solo ubicaciones internas y tránsito
             ('quantity', '!=', 0),  # Excluir quants vacíos
         ])
 
