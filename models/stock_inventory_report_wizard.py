@@ -14,11 +14,11 @@ class StockInventoryReportWizard(models.TransientModel):
         stock_inventory_report = self.env['stock.inventory.date.report']
         stock_inventory_report.search([]).unlink()
 
-        # Obtener el stock inicial
+        # Obtener el stock inicial hasta la fecha seleccionada
         stock_initial = self._get_initial_stock()
 
         # Ajustar el stock con los movimientos de entrada y salida
-        final_stock = self._adjust_stock_with_moves(stock_initial)
+        final_stock = self._get_stock_movements(stock_initial)
 
         # Insertar los resultados en el reporte
         for record in final_stock:
@@ -41,7 +41,7 @@ class StockInventoryReportWizard(models.TransientModel):
 
     def _get_initial_stock(self):
         """ Obtener el stock inicial basado en los quants hasta la fecha de inicio """
-        domain = [('in_date', '<=', self.date_from)]
+        domain = [('create_date', '<=', self.date_from)]
         if self.product_id:
             domain.append(('product_id', '=', self.product_id.id))
         if self.location_id:
@@ -49,7 +49,7 @@ class StockInventoryReportWizard(models.TransientModel):
 
         quants = self.env['stock.quant'].search(domain)
         stock_initial = {}
-        
+
         for quant in quants:
             key = (quant.product_id.id, quant.lot_id.id, quant.location_id.id)
             if key not in stock_initial:
@@ -63,8 +63,8 @@ class StockInventoryReportWizard(models.TransientModel):
                 }
         return stock_initial
 
-    def _adjust_stock_with_moves(self, stock_initial):
-        """ Ajustar el stock inicial con los movimientos entre las fechas seleccionadas """
+    def _get_stock_movements(self, stock_initial):
+        """ Obtener los movimientos de stock dentro del rango de fechas y ajustar el stock inicial """
         domain = [
             ('state', '=', 'done'),
             ('date', '>=', self.date_from),
