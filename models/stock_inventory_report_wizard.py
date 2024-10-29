@@ -135,4 +135,5 @@ class StockInventoryReportWizard(models.TransientModel):
                 'move_type': product_move_type.get((location_id, product_id), '')
             })
 
+
         return result
