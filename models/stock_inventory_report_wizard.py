@@ -74,13 +74,19 @@ class StockInventoryReportWizard(models.TransientModel):
             location_id = move.location_id.id
             destination_location_id = move.location_dest_id.id
 
-            # Si el movimiento es una salida, restamos la cantidad
-            if move.location_id.usage in ['internal', 'transit']:
+            # Si el movimiento es una salida a una ubicación virtual (salida definitiva), restamos la cantidad
+            if move.location_dest_id.usage == 'virtual':
                 if (location_id, product_id) not in product_qty:
                     product_qty[(location_id, product_id)] = 0
                 product_qty[(location_id, product_id)] -= move.product_uom_qty
 
-            # Si el movimiento es una entrada, sumamos la cantidad y registramos el valor
+            # Si el movimiento es una entrada desde una ubicación virtual (entrada al stock), sumamos la cantidad
+            if move.location_id.usage == 'virtual' and move.location_dest_id.usage in ['internal', 'transit']:
+                if (destination_location_id, product_id) not in product_qty:
+                    product_qty[(destination_location_id, product_id)] = 0
+                product_qty[(destination_location_id, product_id)] += move.product_uom_qty
+
+            # Si el movimiento es una entrada normal a ubicaciones internas, sumamos la cantidad y registramos el valor
             if move.location_dest_id.usage in ['internal', 'transit']:
                 if (destination_location_id, product_id) not in product_qty:
                     product_qty[(destination_location_id, product_id)] = 0
@@ -116,9 +122,9 @@ class StockInventoryReportWizard(models.TransientModel):
         # 2. Transformar el resultado en una lista de diccionarios para generar el reporte
         result = []
         for (location_id, product_id), qty in product_qty.items():
-            if qty > 0:  # Solo mostrar productos con stock positivo
-                total_value = product_value[(location_id, product_id)]['total_value']
-                total_qty = product_value[(location_id, product_id)]['total_qty']
+            if qty != 0:  # Mostrar tanto stock positivo como negativo
+                total_value = product_value.get((location_id, product_id), {}).get('total_value', 0)
+                total_qty = product_value.get((location_id, product_id), {}).get('total_qty', 1)
                 unit_value = total_value / total_qty if total_qty > 0 else 0  # Precio promedio ponderado
 
                 result.append({
