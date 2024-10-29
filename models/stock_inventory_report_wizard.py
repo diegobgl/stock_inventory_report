@@ -141,7 +141,6 @@ class StockInventoryReportWizard(models.TransientModel):
         
 
     def _calculate_initial_stock(self, product_qty):
-        """ Calcular el stock inicial sin filtrar por fecha en stock.quant """
         domain_quants = []
         
         # Filtrar por producto si está seleccionado
