@@ -137,8 +137,7 @@ class StockInventoryReportWizard(models.TransientModel):
                     'move_type': product_move_type.get((location_id, product_id), '')
                 })
 
-        return result
-
+            return result
     def _calculate_initial_stock(self, product_qty):
         """ Calcular el stock inicial sin filtrar por fecha en stock.quant """
         domain_quants = []
