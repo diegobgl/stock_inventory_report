@@ -78,14 +78,14 @@ class StockInventoryReportWizard(models.TransientModel):
             location_id = move.location_id.id
             destination_location_id = move.location_dest_id.id
 
-            # Ajustar el stock basado en movimientos
-            if (location_id, product_id) not in stock_initial:
-                stock_initial[(location_id, product_id)] = 0
-
-            if move.location_id.usage in ['internal', 'transit']:  # Excluir 'production'
+            # Solo ajustar si la ubicación de origen es válida (no es de producción)
+            if move.location_id.usage in ['internal', 'transit'] and move.location_dest_id.usage not in ['production']:
+                if (location_id, product_id) not in stock_initial:
+                    stock_initial[(location_id, product_id)] = 0
                 stock_initial[(location_id, product_id)] -= move.product_uom_qty
 
-            if move.location_dest_id.usage in ['internal', 'transit']:  # Excluir 'production'
+            # Solo ajustar si la ubicación de destino es válida (no es de producción)
+            if move.location_dest_id.usage in ['internal', 'transit'] and move.location_id.usage not in ['production']:
                 if (destination_location_id, product_id) not in stock_initial:
                     stock_initial[(destination_location_id, product_id)] = 0
                 stock_initial[(destination_location_id, product_id)] += move.product_uom_qty
