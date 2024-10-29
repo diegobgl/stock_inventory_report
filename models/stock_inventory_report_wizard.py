@@ -61,7 +61,7 @@ class StockInventoryReportWizard(models.TransientModel):
                 # Inicializar el registro en el diccionario si no existe
                 if key not in results:
                     results[key] = {
-                        'location_id': move.location_id,
+                        'location_id': move.location_dest_id if move.location_dest_id.id == self.location_id.id else move.location_id,
                         'product_id': move.product_id,
                         'quantity': 0,  # Cantidad total
                         'lot_name': move_line.lot_id.name if move_line.lot_id else 'Sin Lote',
