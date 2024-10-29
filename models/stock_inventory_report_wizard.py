@@ -3,7 +3,7 @@ from datetime import datetime
 
 class StockInventoryReportWizard(models.TransientModel):
     _name = 'stock.inventory.report.wizard'
-    _description = 'Wizard para generar reporte de inventario a una fecha con ubicaciones virtuales'
+    _description = 'Wizard para generar reporte de inventario a una fecha con recalculo de ajustes negativos'
 
     date_to = fields.Date(string="Hasta la fecha", required=True)
     location_id = fields.Many2one('stock.location', string="Ubicación", required=False)
@@ -69,28 +69,28 @@ class StockInventoryReportWizard(models.TransientModel):
         product_last_move = {}  # Para almacenar la fecha del último movimiento
         product_move_type = {}  # Para almacenar el tipo del último movimiento
 
+        # 2. Calcular el stock inicial a partir de ajustes de inventario iniciales
+        stock_initial = self._calculate_initial_stock()
+
+        # Ajustar el stock inicial sumando entradas y restando salidas
         for move in moves:
             product_id = move.product_id.id
             location_id = move.location_id.id
             destination_location_id = move.location_dest_id.id
 
-            # Verificar si es un movimiento hacia o desde una ubicación virtual
-            is_virtual_outgoing = move.location_id.usage in ['inventory', 'production', 'transit']
-            is_virtual_incoming = move.location_dest_id.usage in ['inventory', 'production', 'transit']
+            # Ajustar el stock basado en movimientos
+            if (location_id, product_id) not in stock_initial:
+                stock_initial[(location_id, product_id)] = 0
 
-            # Si el movimiento es una salida (desde una ubicación interna o virtual), restamos la cantidad
-            if is_virtual_outgoing or move.location_id.usage == 'internal':
-                if (location_id, product_id) not in product_qty:
-                    product_qty[(location_id, product_id)] = 0
-                product_qty[(location_id, product_id)] -= move.product_uom_qty
+            if move.location_id.usage in ['internal', 'production', 'transit']:
+                stock_initial[(location_id, product_id)] -= move.product_uom_qty
 
-            # Si el movimiento es una entrada (hacia una ubicación interna o virtual), sumamos la cantidad
-            if is_virtual_incoming or move.location_dest_id.usage == 'internal':
-                if (destination_location_id, product_id) not in product_qty:
-                    product_qty[(destination_location_id, product_id)] = 0
-                product_qty[(destination_location_id, product_id)] += move.product_uom_qty
+            if move.location_dest_id.usage in ['internal', 'production', 'transit']:
+                if (destination_location_id, product_id) not in stock_initial:
+                    stock_initial[(destination_location_id, product_id)] = 0
+                stock_initial[(destination_location_id, product_id)] += move.product_uom_qty
 
-                # Asegurarse de que el diccionario product_value está inicializado
+                # Asignar el precio calculado o el precio estándar si no hay movimientos previos
                 if (destination_location_id, product_id) not in product_value:
                     product_value[(destination_location_id, product_id)] = {
                         'total_value': 0, 'total_qty': 0}
@@ -117,13 +117,12 @@ class StockInventoryReportWizard(models.TransientModel):
                     move_type = 'Transferencia Interna'
                 product_move_type[(destination_location_id, product_id)] = move_type
 
-        # 2. Transformar el resultado en una lista de diccionarios para generar el reporte
+        # 3. Transformar el resultado en una lista de diccionarios para generar el reporte
         result = []
-        for (location_id, product_id), qty in product_qty.items():
-            # Verificar que el producto tiene su valor calculado
-            if (location_id, product_id) in product_value:
-                total_value = product_value[(location_id, product_id)]['total_value']
-                total_qty = product_value[(location_id, product_id)]['total_qty']
+        for (location_id, product_id), qty in stock_initial.items():
+            if qty != 0:  # Mostrar tanto stock positivo como negativo
+                total_value = product_value[(location_id, product_id)]['total_value'] if (location_id, product_id) in product_value else 0
+                total_qty = product_value[(location_id, product_id)]['total_qty'] if (location_id, product_id) in product_value else qty
                 unit_value = total_value / total_qty if total_qty > 0 else 0  # Precio promedio ponderado
 
                 result.append({
@@ -137,3 +136,21 @@ class StockInventoryReportWizard(models.TransientModel):
                 })
 
         return result
+
+    def _calculate_initial_stock(self):
+        """ Calcular el stock inicial desde ajustes de inventario iniciales """
+        stock_initial = {}
+        inventory_adjustments = self.env['stock.inventory'].search([
+            ('state', '=', 'done'),
+            ('date', '<=', self.date_to)  # Antes de la fecha seleccionada
+        ])
+        
+        for inventory in inventory_adjustments:
+            for line in inventory.line_ids:
+                location_id = line.location_id.id
+                product_id = line.product_id.id
+                if (location_id, product_id) not in stock_initial:
+                    stock_initial[(location_id, product_id)] = 0
+                stock_initial[(location_id, product_id)] += line.product_qty
+
+        return stock_initial
