@@ -69,7 +69,7 @@ class StockInventoryReportWizard(models.TransientModel):
         product_last_move = {}  # Para almacenar la fecha del último movimiento
         product_move_type = {}  # Para almacenar el tipo del último movimiento
 
-        # 2. Calcular el stock inicial a partir de ajustes de inventario iniciales
+        # 2. Calcular el stock inicial a partir de los quants (cantidades reales en las ubicaciones)
         stock_initial = self._calculate_initial_stock()
 
         # Ajustar el stock inicial sumando entradas y restando salidas
@@ -138,19 +138,23 @@ class StockInventoryReportWizard(models.TransientModel):
         return result
 
     def _calculate_initial_stock(self):
-        """ Calcular el stock inicial desde ajustes de inventario iniciales """
+        """ Calcular el stock inicial usando los quants """
         stock_initial = {}
-        inventory_adjustments = self.env['stock.inventory'].search([
-            ('state', '=', 'done'),
-            ('date', '<=', self.date_to)  # Antes de la fecha seleccionada
+
+        # Buscar quants hasta la fecha actual para obtener el stock inicial
+        quants = self.env['stock.quant'].search([
+            ('location_id.usage', 'in', ['internal', 'transit']),  # Ubicaciones internas y en tránsito
+            ('quantity', '!=', 0),  # Excluir quants vacíos
         ])
-        
-        for inventory in inventory_adjustments:
-            for line in inventory.line_ids:
-                location_id = line.location_id.id
-                product_id = line.product_id.id
-                if (location_id, product_id) not in stock_initial:
-                    stock_initial[(location_id, product_id)] = 0
-                stock_initial[(location_id, product_id)] += line.product_qty
+
+        # Calcular el stock inicial para cada producto en cada ubicación
+        for quant in quants:
+            location_id = quant.location_id.id
+            product_id = quant.product_id.id
+            if (location_id, product_id) not in stock_initial:
+                stock_initial[(location_id, product_id)] = 0
+
+            # Acumular la cantidad inicial del producto en esa ubicación
+            stock_initial[(location_id, product_id)] += quant.quantity
 
         return stock_initial
