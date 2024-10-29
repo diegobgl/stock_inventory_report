@@ -21,7 +21,7 @@ class StockInventoryReportWizard(models.TransientModel):
             quantity = quant['quantity']
             unit_value = quant['unit_value']  # Precio promedio calculado
             lot_name = quant.get('lot_name', '')  # Lote o número de serie
-            last_move_date = quant.get('last_move_date', '')  # Fecha del último movimiento
+            last_move_date = quant.get('last_move_date', None)  # Fecha del último movimiento, usar None si está vacío
             move_type = quant.get('move_type', '')  # Tipo de movimiento
 
             # Crear el registro del reporte con los datos obtenidos
@@ -32,7 +32,7 @@ class StockInventoryReportWizard(models.TransientModel):
                 'unit_value': unit_value,  # Precio unitario promedio
                 'total_value': unit_value * quantity,  # Valor total
                 'lot_name': lot_name,  # Lote/Serie
-                'last_move_date': last_move_date,  # Fecha del último movimiento
+                'last_move_date': last_move_date if last_move_date else None,  # Asegurar que no se pasa un valor vacío
                 'move_type': move_type,  # Tipo de movimiento
             })
 
@@ -131,7 +131,7 @@ class StockInventoryReportWizard(models.TransientModel):
                     'quantity': qty,
                     'unit_value': unit_value,  # Precio promedio
                     'lot_name': product_lots.get((location_id, product_id), ''),
-                    'last_move_date': product_last_move.get((location_id, product_id), ''),
+                    'last_move_date': product_last_move.get((location_id, product_id), None),  # Evitar pasar un valor vacío
                     'move_type': product_move_type.get((location_id, product_id), '')
                 })
 
