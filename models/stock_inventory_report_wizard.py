@@ -90,7 +90,7 @@ class StockInventoryReportWizard(models.TransientModel):
                     product_qty[(destination_location_id, product_id)] = 0
                 product_qty[(destination_location_id, product_id)] += move.product_uom_qty
 
-                # Asignar el precio calculado o el precio estándar si no hay movimientos previos
+                # Asegurarse de que el diccionario product_value está inicializado
                 if (destination_location_id, product_id) not in product_value:
                     product_value[(destination_location_id, product_id)] = {
                         'total_value': 0, 'total_qty': 0}
@@ -120,20 +120,20 @@ class StockInventoryReportWizard(models.TransientModel):
         # 2. Transformar el resultado en una lista de diccionarios para generar el reporte
         result = []
         for (location_id, product_id), qty in product_qty.items():
-            # Mostrar tanto productos con stock positivo como negativo
-            total_value = product_value[(location_id, product_id)]['total_value']
-            total_qty = product_value[(location_id, product_id)]['total_qty']
-            unit_value = total_value / total_qty if total_qty > 0 else 0  # Precio promedio ponderado
+            # Verificar que el producto tiene su valor calculado
+            if (location_id, product_id) in product_value:
+                total_value = product_value[(location_id, product_id)]['total_value']
+                total_qty = product_value[(location_id, product_id)]['total_qty']
+                unit_value = total_value / total_qty if total_qty > 0 else 0  # Precio promedio ponderado
 
-            result.append({
-                'location_id': self.env['stock.location'].browse(location_id),
-                'product_id': self.env['product.product'].browse(product_id),
-                'quantity': qty,
-                'unit_value': unit_value,  # Precio promedio
-                'lot_name': product_lots.get((location_id, product_id), ''),
-                'last_move_date': product_last_move.get((location_id, product_id), ''),
-                'move_type': product_move_type.get((location_id, product_id), '')
-            })
-
+                result.append({
+                    'location_id': self.env['stock.location'].browse(location_id),
+                    'product_id': self.env['product.product'].browse(product_id),
+                    'quantity': qty,
+                    'unit_value': unit_value,  # Precio promedio
+                    'lot_name': product_lots.get((location_id, product_id), ''),
+                    'last_move_date': product_last_move.get((location_id, product_id), ''),
+                    'move_type': product_move_type.get((location_id, product_id), '')
+                })
 
         return result
