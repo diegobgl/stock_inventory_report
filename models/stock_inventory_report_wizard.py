@@ -56,12 +56,13 @@ class StockInventoryReportWizard(models.TransientModel):
 
         for move in stock_moves:
             for move_line in move.move_line_ids:
+                # Clave única: Producto, Lote, Ubicación
                 key = (move.product_id.id, move_line.lot_id.id, move.location_id.id)
                 
                 # Inicializar el registro en el diccionario si no existe
                 if key not in results:
                     results[key] = {
-                        'location_id': move.location_dest_id if move.location_dest_id.id == self.location_id.id else move.location_id,
+                        'location_id': move_line.location_dest_id if move_line.location_dest_id.id == self.location_id.id else move_line.location_id,
                         'product_id': move.product_id,
                         'quantity': 0,  # Cantidad total
                         'lot_name': move_line.lot_id.name if move_line.lot_id else 'Sin Lote',
@@ -70,9 +71,10 @@ class StockInventoryReportWizard(models.TransientModel):
                     }
 
                 # Sumar o restar las cantidades dependiendo de si es entrada o salida
-                if move.location_dest_id.id == self.location_id.id:
+                if move_line.location_dest_id.id == self.location_id.id:
                     results[key]['quantity'] += move_line.qty_done  # Entrada
-                elif move.location_id.id == self.location_id.id:
+                elif move_line.location_id.id == self.location_id.id:
                     results[key]['quantity'] -= move_line.qty_done  # Salida
 
-        return results.values()
+        # Devolver los movimientos combinados
+        return list(results.values())
