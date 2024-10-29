@@ -120,19 +120,19 @@ class StockInventoryReportWizard(models.TransientModel):
         # 2. Transformar el resultado en una lista de diccionarios para generar el reporte
         result = []
         for (location_id, product_id), qty in product_qty.items():
-            if qty > 0:  # Solo mostrar productos con stock positivo
-                total_value = product_value[(location_id, product_id)]['total_value']
-                total_qty = product_value[(location_id, product_id)]['total_qty']
-                unit_value = total_value / total_qty if total_qty > 0 else 0  # Precio promedio ponderado
+            # Mostrar tanto productos con stock positivo como negativo
+            total_value = product_value[(location_id, product_id)]['total_value']
+            total_qty = product_value[(location_id, product_id)]['total_qty']
+            unit_value = total_value / total_qty if total_qty > 0 else 0  # Precio promedio ponderado
 
-                result.append({
-                    'location_id': self.env['stock.location'].browse(location_id),
-                    'product_id': self.env['product.product'].browse(product_id),
-                    'quantity': qty,
-                    'unit_value': unit_value,  # Precio promedio
-                    'lot_name': product_lots.get((location_id, product_id), ''),
-                    'last_move_date': product_last_move.get((location_id, product_id), ''),
-                    'move_type': product_move_type.get((location_id, product_id), '')
-                })
+            result.append({
+                'location_id': self.env['stock.location'].browse(location_id),
+                'product_id': self.env['product.product'].browse(product_id),
+                'quantity': qty,
+                'unit_value': unit_value,  # Precio promedio
+                'lot_name': product_lots.get((location_id, product_id), ''),
+                'last_move_date': product_last_move.get((location_id, product_id), ''),
+                'move_type': product_move_type.get((location_id, product_id), '')
+            })
 
         return result
