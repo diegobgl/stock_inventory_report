@@ -139,13 +139,19 @@ class StockInventoryReportWizard(models.TransientModel):
 
         return result
 
-    def _calculate_initial_stock(self, domain_moves, product_qty):
-        """ Calcular el stock inicial considerando los movimientos negativos iniciales o ajustes """
-        # Dominio para los quants (no se usa el campo 'state')
-        domain_quants = domain_moves.copy()
-        domain_quants = [(field, operator, value) for (field, operator, value) in domain_quants if field != 'state']
+    def _calculate_initial_stock(self, product_qty):
+        """ Calcular el stock inicial sin filtrar por fecha en stock.quant """
+        domain_quants = []
         
-        # Buscar los quants
+        # Filtrar por producto si está seleccionado
+        if self.product_id:
+            domain_quants.append(('product_id', '=', self.product_id.id))
+
+        # Filtrar por ubicación si está seleccionada
+        if self.location_id:
+            domain_quants.append(('location_id', '=', self.location_id.id))
+
+        # Buscar los quants relevantes
         initial_stock = self.env['stock.quant'].search(domain_quants)
         
         # Ajustar el stock basado en los quants encontrados
