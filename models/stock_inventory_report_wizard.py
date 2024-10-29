@@ -60,7 +60,7 @@ class StockInventoryReportWizard(models.TransientModel):
             domain_moves.append(('location_id', '=', self.location_id.id))
             domain_moves.append(('location_dest_id', '=', self.location_id.id))
 
-        # 1. Obtener los movimientos hasta la fecha seleccionada (entradas y salidas)
+        # Obtener los movimientos hasta la fecha seleccionada (entradas y salidas)
         moves = self.env['stock.move'].search(domain_moves)
 
         product_qty = {}
@@ -74,25 +74,25 @@ class StockInventoryReportWizard(models.TransientModel):
             location_id = move.location_id.id
             destination_location_id = move.location_dest_id.id
 
-            # Si el movimiento es una salida a una ubicación virtual (salida definitiva), restamos la cantidad
+            # Si el movimiento es una salida a una ubicación virtual (descuento de stock)
             if move.location_dest_id.usage == 'virtual':
                 if (location_id, product_id) not in product_qty:
                     product_qty[(location_id, product_id)] = 0
                 product_qty[(location_id, product_id)] -= move.product_uom_qty
 
-            # Si el movimiento es una entrada desde una ubicación virtual (entrada al stock), sumamos la cantidad
-            if move.location_id.usage == 'virtual' and move.location_dest_id.usage in ['internal', 'transit']:
+            # Si el movimiento es una entrada desde una ubicación virtual (aumento de stock)
+            elif move.location_id.usage == 'virtual' and move.location_dest_id.usage in ['internal', 'transit']:
                 if (destination_location_id, product_id) not in product_qty:
                     product_qty[(destination_location_id, product_id)] = 0
                 product_qty[(destination_location_id, product_id)] += move.product_uom_qty
 
-            # Si el movimiento es una entrada normal a ubicaciones internas, sumamos la cantidad y registramos el valor
+            # Si el movimiento es una entrada normal a ubicaciones internas, sumamos la cantidad
             if move.location_dest_id.usage in ['internal', 'transit']:
                 if (destination_location_id, product_id) not in product_qty:
                     product_qty[(destination_location_id, product_id)] = 0
                 product_qty[(destination_location_id, product_id)] += move.product_uom_qty
 
-                # Asignar el precio calculado o el precio estándar si no hay movimientos previos
+                # Calcular el valor del producto
                 if (destination_location_id, product_id) not in product_value:
                     product_value[(destination_location_id, product_id)] = {
                         'total_value': 0, 'total_qty': 0}
@@ -113,13 +113,13 @@ class StockInventoryReportWizard(models.TransientModel):
                 product_last_move[(destination_location_id, product_id)] = move.date
 
                 # Determinar el tipo de movimiento
-                if move.picking_type_id.code == 'incoming':
-                    move_type = 'Compra'
-                else:
-                    move_type = 'Transferencia Interna'
+                move_type = 'Compra' if move.picking_type_id.code == 'incoming' else 'Transferencia Interna'
                 product_move_type[(destination_location_id, product_id)] = move_type
 
-        # 2. Transformar el resultado en una lista de diccionarios para generar el reporte
+        # Considerar movimientos negativos (ajustes iniciales o cargas negativas)
+        stock_initial = self._calculate_initial_stock(domain_moves, product_qty)
+
+        # Transformar el resultado en una lista de diccionarios para generar el reporte
         result = []
         for (location_id, product_id), qty in product_qty.items():
             if qty != 0:  # Mostrar tanto stock positivo como negativo
@@ -138,3 +138,14 @@ class StockInventoryReportWizard(models.TransientModel):
                 })
 
         return result
+
+    def _calculate_initial_stock(self, domain_moves, product_qty):
+        """ Calcular el stock inicial considerando los movimientos negativos iniciales o ajustes """
+        initial_stock = self.env['stock.quant'].search(domain_moves)
+        for quant in initial_stock:
+            key = (quant.location_id.id, quant.product_id.id)
+            if key not in product_qty:
+                product_qty[key] = 0
+            product_qty[key] += quant.quantity
+
+        return product_qty
