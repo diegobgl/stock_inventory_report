@@ -3,7 +3,7 @@ from datetime import datetime
 
 class StockInventoryReportWizard(models.TransientModel):
     _name = 'stock.inventory.report.wizard'
-    _description = 'Wizard para generar reporte de inventario a una fecha con detalles'
+    _description = 'Wizard para generar reporte de inventario a una fecha con ubicaciones virtuales'
 
     date_to = fields.Date(string="Hasta la fecha", required=True)
     location_id = fields.Many2one('stock.location', string="Ubicación", required=False)
@@ -47,7 +47,7 @@ class StockInventoryReportWizard(models.TransientModel):
     def _get_stock_at_date(self):
         date_to = self.date_to
 
-        # Dominio básico para obtener los movimientos confirmados antes de la fecha
+        # Dominio básico para obtener los movimientos confirmados hasta la fecha seleccionada
         domain_moves = [('state', '=', 'done'), ('date', '<=', date_to)]
 
         # Filtrar por producto si está seleccionado
@@ -74,14 +74,18 @@ class StockInventoryReportWizard(models.TransientModel):
             location_id = move.location_id.id
             destination_location_id = move.location_dest_id.id
 
-            # Si el movimiento es una salida, restamos la cantidad
-            if move.location_id.usage in ['internal', 'transit']:
+            # Verificar si es un movimiento hacia o desde una ubicación virtual
+            is_virtual_outgoing = move.location_id.usage in ['inventory', 'production', 'transit']
+            is_virtual_incoming = move.location_dest_id.usage in ['inventory', 'production', 'transit']
+
+            # Si el movimiento es una salida (desde una ubicación interna o virtual), restamos la cantidad
+            if is_virtual_outgoing or move.location_id.usage == 'internal':
                 if (location_id, product_id) not in product_qty:
                     product_qty[(location_id, product_id)] = 0
                 product_qty[(location_id, product_id)] -= move.product_uom_qty
 
-            # Si el movimiento es una entrada, sumamos la cantidad y registramos el valor
-            if move.location_dest_id.usage in ['internal', 'transit']:
+            # Si el movimiento es una entrada (hacia una ubicación interna o virtual), sumamos la cantidad
+            if is_virtual_incoming or move.location_dest_id.usage == 'internal':
                 if (destination_location_id, product_id) not in product_qty:
                     product_qty[(destination_location_id, product_id)] = 0
                 product_qty[(destination_location_id, product_id)] += move.product_uom_qty
@@ -95,7 +99,7 @@ class StockInventoryReportWizard(models.TransientModel):
                 product_value[(destination_location_id, product_id)]['total_value'] += move.product_uom_qty * move_price_unit
                 product_value[(destination_location_id, product_id)]['total_qty'] += move.product_uom_qty
 
-                # **Ajuste clave aquí**: Obtener el lote/número de serie desde las líneas del movimiento (move_line_ids)
+                # Obtener el lote/número de serie desde las líneas del movimiento (move_line_ids)
                 lot_name = ''
                 for move_line in move.move_line_ids:
                     if move_line.lot_id:
