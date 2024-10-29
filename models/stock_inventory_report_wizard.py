@@ -81,14 +81,14 @@ class StockInventoryReportWizard(models.TransientModel):
             location_id = move.location_id.id
             destination_location_id = move.location_dest_id.id
 
-            # Si es una salida (ubicación interna o de tránsito)
+            # Si es una salida de interna o tránsito a una ubicación virtual (descuento de stock)
             if move.location_dest_id.usage == 'virtual':
                 key = (location_id, product_id)
                 if key in stock_initial:
                     stock_initial[key]['quantity'] -= move.product_uom_qty
                     stock_initial[key]['total_value'] -= move.product_uom_qty * move.price_unit
 
-            # Si es una entrada desde una ubicación virtual
+            # Si es una entrada desde una ubicación virtual (aumento de stock)
             elif move.location_id.usage == 'virtual' and move.location_dest_id.usage in ['internal', 'transit']:
                 key = (destination_location_id, product_id)
                 if key not in stock_initial:
@@ -96,21 +96,21 @@ class StockInventoryReportWizard(models.TransientModel):
                 stock_initial[key]['quantity'] += move.product_uom_qty
                 stock_initial[key]['total_value'] += move.product_uom_qty * move.price_unit
 
-            # Ajustar para las ubicaciones internas y de tránsito
-            if move.location_dest_id.usage in ['internal', 'transit']:
+            # **Evitar duplicados en movimientos internos**
+            # Si es un movimiento entre transit y internal, lo contamos solo una vez como entrada o salida.
+            if (move.location_id.usage == 'internal' and move.location_dest_id.usage == 'transit'):
+                # Esto es una salida de una ubicación interna a tránsito
+                key = (location_id, product_id)
+                if key in stock_initial:
+                    stock_initial[key]['quantity'] -= move.product_uom_qty
+                    stock_initial[key]['total_value'] -= move.product_uom_qty * move.price_unit
+            elif (move.location_id.usage == 'transit' and move.location_dest_id.usage == 'internal'):
+                # Esto es una entrada desde una ubicación de tránsito a una interna
                 key = (destination_location_id, product_id)
                 if key not in stock_initial:
                     stock_initial[key] = {'quantity': 0, 'unit_value': move.price_unit, 'total_value': 0}
                 stock_initial[key]['quantity'] += move.product_uom_qty
                 stock_initial[key]['total_value'] += move.product_uom_qty * move.price_unit
-
-            # Si es una salida desde una ubicación interna o de tránsito
-            if move.location_id.usage in ['internal', 'transit'] and move.location_dest_id.usage == 'virtual':
-                key = (location_id, product_id)
-                if key not in stock_initial:
-                    stock_initial[key] = {'quantity': 0, 'unit_value': move.price_unit, 'total_value': 0}
-                stock_initial[key]['quantity'] -= move.product_uom_qty
-                stock_initial[key]['total_value'] -= move.product_uom_qty * move.price_unit
 
         return stock_initial
 
