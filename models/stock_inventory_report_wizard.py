@@ -1,164 +1,70 @@
-from odoo import models, fields, api
-from datetime import datetime
+from odoo import api, fields, models
+import logging
+
+_logger = logging.getLogger(__name__)
 
 class StockInventoryReportWizard(models.TransientModel):
     _name = 'stock.inventory.report.wizard'
-    _description = 'Wizard para generar reporte de inventario a una fecha con detalles'
+    _description = 'Wizard para generar reporte de inventario'
 
+    date_from = fields.Date(string="Desde la fecha", required=True)
     date_to = fields.Date(string="Hasta la fecha", required=True)
     location_id = fields.Many2one('stock.location', string="Ubicación", required=False)
     product_id = fields.Many2one('product.product', string="Producto", required=False)
 
     def action_generate_report(self):
-        stock_inventory_report = self.env['stock.inventory.date.report']
+        stock_inventory_report = self.env['stock.inventory.report']
         stock_inventory_report.search([]).unlink()  # Limpiar el reporte previo
 
-        # Obtener el stock inicial (incluye quants negativos)
-        stock_initial = self._get_initial_stock()
+        moves = self._get_stock_moves()  # Obtener los movimientos
 
-        # Ajustar el stock con los movimientos (incluye salidas y entradas)
-        stock_final = self._adjust_stock_with_moves(stock_initial)
+        for move in moves:
+            product = move.product_id
+            location = move.location_id
+            quantity = move.product_uom_qty  # Cantidad total movida
 
-        # Crear registros del reporte
-        self._create_report_entries(stock_final)
+            if product and location:
+                product_record = product
+                location_record = location
+
+                _logger.info(f"Creating report entry for product: {product_record.name}, location: {location_record.name}, quantity: {quantity}")
+
+                # Crear registro en el reporte
+                stock_inventory_report.create({
+                    'product_id': product_record.id,
+                    'location_id': location_record.id,
+                    'quantity': quantity,
+                    'unit_value': product_record.standard_price,  # Usamos el precio estándar del producto
+                    'total_value': quantity * product_record.standard_price,  # Valor total = cantidad * precio unitario
+                })
 
         return {
             'type': 'ir.actions.act_window',
-            'name': 'Reporte de Inventario a Fecha',
+            'name': 'Reporte de Inventario Histórico',
             'view_mode': 'tree',
-            'res_model': 'stock.inventory.date.report',
+            'res_model': 'stock.inventory.report',
             'target': 'main',
         }
 
-    def _get_initial_stock(self):
-        """Obtener el stock inicial desde los quants, incluyendo quants negativos"""
-        domain_quants = []
-
-        # Filtrar por producto si está seleccionado
-        if self.product_id:
-            domain_quants.append(('product_id', '=', self.product_id.id))
-
-        # Filtrar por ubicación si está seleccionada
-        if self.location_id:
-            domain_quants.append(('location_id', '=', self.location_id.id))
-
-        # Incluir tanto quants positivos como negativos
-        quants = self.env['stock.quant'].search(domain_quants)
-        stock_initial = {}
+    def _get_stock_moves(self):
+        # Dominio para filtrar movimientos confirmados entre las fechas seleccionadas
+        domain = [('state', '=', 'done')]
         
-        for quant in quants:
-            key = (quant.location_id.id, quant.product_id.id)
-            if key not in stock_initial:
-                stock_initial[key] = {
-                    'quantity': 0,
-                    'unit_value': quant.product_id.standard_price,
-                    'total_value': 0
-                }
-            stock_initial[key]['quantity'] += quant.quantity
-            stock_initial[key]['total_value'] += quant.quantity * quant.product_id.standard_price
-
-        # **Aplicar ajustes iniciales explícitamente**
-        stock_initial = self._apply_inventory_adjustments(stock_initial)
-
-        return stock_initial
-
-    def _apply_inventory_adjustments(self, stock_initial):
-        """Aplicar ajustes de inventario iniciales que impacten el stock"""
-        # Buscar ajustes de inventario antes de la fecha seleccionada
-        domain_inventory_adjustments = [
-            ('state', '=', 'done'),
-            ('date', '<=', self.date_to)
-        ]
-
-        # Filtrar por producto si está seleccionado
-        if self.product_id:
-            domain_inventory_adjustments.append(('product_id', '=', self.product_id.id))
-
-        # Filtrar por ubicación si está seleccionada
+        # Aplicar los filtros de fechas, ubicación y producto
+        if self.date_from:
+            domain.append(('date', '>=', self.date_from))
+        if self.date_to:
+            domain.append(('date', '<=', self.date_to))
         if self.location_id:
-            domain_inventory_adjustments.append(('location_id', '=', self.location_id.id))
-
-        inventory_adjustments = self.env['stock.inventory'].search(domain_inventory_adjustments)
-
-        for adjustment in inventory_adjustments:
-            for line in adjustment.line_ids:
-                key = (line.location_id.id, line.product_id.id)
-                if key not in stock_initial:
-                    stock_initial[key] = {'quantity': 0, 'unit_value': line.product_id.standard_price, 'total_value': 0}
-                
-                # Aplicar la cantidad ajustada al stock inicial
-                stock_initial[key]['quantity'] += line.product_qty
-                stock_initial[key]['total_value'] += line.product_qty * line.product_id.standard_price
-
-        return stock_initial
-
-    def _adjust_stock_with_moves(self, stock_initial):
-        """Ajustar el stock inicial con los movimientos de entradas y salidas"""
-        date_to = self.date_to
-        domain_moves = [('state', '=', 'done'), ('date', '<=', date_to)]
-
-        # Filtrar por producto si está seleccionado
+            domain.append(('location_id', '=', self.location_id.id))
         if self.product_id:
-            domain_moves.append(('product_id', '=', self.product_id.id))
+            domain.append(('product_id', '=', self.product_id.id))
 
-        # Filtrar por ubicación si está seleccionada
-        if self.location_id:
-            domain_moves.append('|')
-            domain_moves.append(('location_id', '=', self.location_id.id))
-            domain_moves.append(('location_dest_id', '=', self.location_id.id))
-
-        moves = self.env['stock.move'].search(domain_moves)
-
+        # Buscar movimientos de stock que cumplan con los criterios
+        moves = self.env['stock.move'].search(domain)
+        
+        # Registrar información de los movimientos encontrados
         for move in moves:
-            product_id = move.product_id.id
-            location_id = move.location_id.id
-            destination_location_id = move.location_dest_id.id
+            _logger.info(f"Move: {move.product_id.name}, Location: {move.location_id.name}, Quantity: {move.product_uom_qty}")
 
-            # Si es una salida de interna o tránsito a una ubicación virtual (descuento de stock)
-            if move.location_dest_id.usage == 'virtual':
-                key = (location_id, product_id)
-                if key in stock_initial:
-                    stock_initial[key]['quantity'] -= move.product_uom_qty
-                    stock_initial[key]['total_value'] -= move.product_uom_qty * move.price_unit
-
-            # Si es una entrada desde una ubicación virtual (aumento de stock)
-            elif move.location_id.usage == 'virtual' and move.location_dest_id.usage in ['internal', 'transit']:
-                key = (destination_location_id, product_id)
-                if key not in stock_initial:
-                    stock_initial[key] = {'quantity': 0, 'unit_value': move.price_unit, 'total_value': 0}
-                stock_initial[key]['quantity'] += move.product_uom_qty
-                stock_initial[key]['total_value'] += move.product_uom_qty * move.price_unit
-
-            # Ajuste de stock en ubicaciones internas y de tránsito
-            if move.location_dest_id.usage in ['internal', 'transit']:
-                key = (destination_location_id, product_id)
-                if key not in stock_initial:
-                    stock_initial[key] = {'quantity': 0, 'unit_value': move.price_unit, 'total_value': 0}
-                stock_initial[key]['quantity'] += move.product_uom_qty
-                stock_initial[key]['total_value'] += move.product_uom_qty * move.price_unit
-
-            # Si es una salida desde una ubicación interna o de tránsito
-            if move.location_id.usage in ['internal', 'transit'] and move.location_dest_id.usage == 'virtual':
-                key = (location_id, product_id)
-                if key not in stock_initial:
-                    stock_initial[key] = {'quantity': 0, 'unit_value': move.price_unit, 'total_value': 0}
-                stock_initial[key]['quantity'] -= move.product_uom_qty
-                stock_initial[key]['total_value'] -= move.product_uom_qty * move.price_unit
-
-        return stock_initial
-
-    def _create_report_entries(self, stock_final):
-        """Crear los registros del reporte en base al stock final calculado"""
-        stock_inventory_report = self.env['stock.inventory.date.report']
-
-        for key, values in stock_final.items():
-            location_id, product_id = key
-            quantity = values['quantity']
-            unit_value = values['total_value'] / quantity if quantity > 0 else 0
-            stock_inventory_report.create({
-                'location_id': location_id,
-                'product_id': product_id,
-                'quantity': quantity,
-                'unit_value': unit_value,
-                'total_value': values['total_value'],
-            })
+        return moves
