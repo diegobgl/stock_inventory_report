@@ -13,7 +13,7 @@ class StockInventoryReportWizard(models.TransientModel):
     product_id = fields.Many2one('product.product', string="Producto", required=False)
 
     def action_generate_report(self):
-        stock_inventory_report = self.env['stock.inventory.report']
+        stock_inventory_report = self.env['stock.inventory.date.report']
         stock_inventory_report.search([]).unlink()  # Limpiar el reporte previo
 
         moves = self._get_stock_moves()  # Obtener los movimientos
@@ -42,7 +42,7 @@ class StockInventoryReportWizard(models.TransientModel):
             'type': 'ir.actions.act_window',
             'name': 'Reporte de Inventario Histórico',
             'view_mode': 'tree',
-            'res_model': 'stock.inventory.report',
+            'res_model': 'stock.inventory.date.report',
             'target': 'main',
         }
 
